@@ -351,3 +351,35 @@ def describe_scores(est: TonicEstimate, top: int = 3) -> list[str]:
         comps = " ".join(f"{name}={est.components[name][k]:.2f}" for name in ("dur", "end", "key", "bass", "mix", "frame", "onset"))
         lines.append(f"{pitch_name(k):>2}  score={est.scores[k]:.3f}  {comps}{tag}")
     return lines
+
+
+def snap_rare_degrees(notes: list[NoteEvent], scale: ScaleEstimate, tonic_pc: int, cfg: Config) -> int:
+    """Conservative cleanup: a short, low-confidence note on a degree the song barely uses is almost
+    always a pitch-tracking artefact; move it one semitone to the nearest degree the song does use.
+    Returns the number of notes snapped. Long or confident notes are never touched."""
+    D = scale.degree_mass
+    present = set(scale.degrees_present)
+    n_snapped = 0
+    for n in notes:
+        deg = (n.midi - tonic_pc) % 12
+        if deg in present or D[deg] >= cfg.degree_absent_thr:
+            continue
+        if n.duration >= cfg.snap_max_ms / 1000 or n.confidence >= cfg.snap_max_conf:
+            continue
+        up, down = (deg + 1) % 12, (deg - 1) % 12
+        cands = [(D[up], +1), (D[down], -1)]
+        cands = [(m, d) for m, d in cands if m >= cfg.degree_absent_thr]
+        if not cands:
+            continue
+        # prefer the neighbour the intonation leans toward when both are in use
+        if len(cands) == 2:
+            cands.sort(key=lambda c: (-(c[1] * n.cents_dev), -c[0]))
+        else:
+            cands.sort(key=lambda c: -c[0])
+        shift = cands[0][1]
+        n.midi += shift
+        if n.glide_to_midi is not None:
+            n.glide_to_midi += shift
+        n.flags.add("snapped")
+        n_snapped += 1
+    return n_snapped

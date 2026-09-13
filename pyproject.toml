@@ -13,6 +13,7 @@ dependencies = [
     "typer>=0.12",
     "rich>=13",
     "demucs-mlx[convert]>=1.4",
+    "torchcrepe>=0.0.24",
 ]
 
 [project.optional-dependencies]

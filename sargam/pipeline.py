@@ -13,7 +13,7 @@ from .flute import fold_octaves, recommend_flute
 from .model import F0Track, Flute, FluteRecommendation, KeyChangeWarning, NoteEvent, Phrase, ScaleEstimate, TonicEstimate, TuningEstimate
 from .notes import assign_degrees, choose_sa_octave, segment_notes, split_phrases
 from .pitch import extract_f0
-from .tonic import Profiles, build_profiles, detect_key_changes, estimate_scale, estimate_tonic
+from .tonic import Profiles, build_profiles, detect_key_changes, estimate_scale, estimate_tonic, snap_rare_degrees
 from .tuning import estimate_tuning_cents, refine_sa_hz
 
 
@@ -64,6 +64,10 @@ def analyze(
     tonic.sa_midi = sa_midi
     tonic.sa_hz = refine_sa_hz(track, tuning.offset_cents, sa_midi, cfg)
     scale = estimate_scale(profiles, tonic.pc, cfg)
+    if cfg.snap_rare:
+        k = snap_rare_degrees(notes, scale, tonic.pc, cfg)
+        if k:
+            log.append(f"snapped {k} short off-scale notes onto the detected scale")
     key_changes = detect_key_changes(notes, phrases, tonic.pc, cfg, profiles)
     flute = recommend_flute(notes, tonic.pc, flutes, cfg, sa_midi=sa_midi)
     if fold and not flute.fits:

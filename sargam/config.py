@@ -69,6 +69,9 @@ class Config:
     degree_absent_thr: float = 0.02
     mixed_thr: float = 0.25
     drone_peak_thr: float = 0.35
+    snap_rare: bool = True  # snap short, low-confidence notes on unused degrees to the scale
+    snap_max_ms: float = 200.0
+    snap_max_conf: float = 0.75
     keychange_window_s: float = 30.0
     keychange_hop_s: float = 15.0
     keychange_margin: float = 0.04

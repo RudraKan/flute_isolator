@@ -33,13 +33,14 @@ def transcribe(
     backend: str = typer.Option("pyin", "--pitch", help="Pitch tracker backend: pyin or crepe"),
     times: bool = typer.Option(False, "--times", help="Prefix each phrase with its start time"),
     diag: bool = typer.Option(False, "--diag", help="Print tonic candidate table and degree histogram"),
+    no_snap: bool = typer.Option(False, "--no-snap", help="Keep short off-scale notes instead of snapping them to the scale"),
 ):
     """Transcribe a song into sargam notation (text), timed notes (JSON) and a MIDI melody."""
     from .flute import parse_flutes
     from .pipeline import run
     from .render import diagnostics, to_text, write_outputs
 
-    cfg = _cfg(pitch_backend=backend)
+    cfg = _cfg(pitch_backend=backend, snap_rare=not no_snap)
     owned = parse_flutes(flutes)
     with console.status("working...") as status:
         res = run(audio, cfg, sa, owned, not no_beats, fold_octaves, model, no_separate, progress=lambda m: status.update(m))

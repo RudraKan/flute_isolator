@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import load_meta, song_dirs
+from tests.conftest import load_meta, song_dirs
 from sargam.config import Config
 from sargam.metrics import compare_tokens
 from sargam.pipeline import run

@@ -17,6 +17,8 @@ class Config:
     # tuning
     tuning_smooth_bins: float = 5.0
     tuning_disagree_cents: float = 20.0
+    tuning_smooth_ms: float = 150.0  # vibrato averages out over this window
+    tuning_min_sharpness: float = 0.02  # peak bin share of the 100-bin vocal histogram
 
     # segmentation: preprocessing
     bridge_gap_frames: int = 5

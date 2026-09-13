@@ -49,6 +49,7 @@ class Config:
     ornament_max_span_cents: float = 500.0
     glide_slope_cents_per_s: float = 400.0
     glide_min_ms: float = 120.0
+    slide_in_max_ms: float = 150.0  # shorter glides landing on the next note are approach slides
     min_note_conf: float = 0.3
     phrase_gap_s: float = 0.35
 

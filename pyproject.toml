@@ -12,7 +12,7 @@ dependencies = [
     "pretty_midi>=0.2.10",
     "typer>=0.12",
     "rich>=13",
-    "demucs-mlx>=1.4",
+    "demucs-mlx[convert]>=1.4",
 ]
 
 [project.optional-dependencies]

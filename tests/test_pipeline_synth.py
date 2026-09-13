@@ -102,5 +102,7 @@ def test_out_of_range_flagged():
 
 def test_phrases_split_at_gaps():
     text = "S R G -\nP D N -\nS' - - -\n"
-    r, res = run_synth(text, sa_pc=6)
+    r, res = run_synth(text, sa_pc=6, phrase_gap_beats=2)
     assert len(res.phrases) == 3
+    r, res = run_synth(text, sa_pc=6, phrase_gap_beats=0.5)  # 0.2 s gaps: one phrase
+    assert len(res.phrases) == 1

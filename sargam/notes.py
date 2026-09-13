@@ -403,9 +403,10 @@ def detect_glides(segs: list[RawSegment], hop_s: float, cfg: Config) -> list[tup
             for r in ramp[1:]:
                 merged = _merge(merged, r, semitone=s.semitone)
             merged.std_cents = s.std_cents
+            merged.mean_cents = s.mean_cents
             last = ramp[-1]
             target = end_semitone(last, direction)
-            if j < len(segs) and segs[j].i0 - last.i1 <= gap_tol and (segs[j].semitone - last.semitone) * direction > 0:
+            if j < len(segs) and segs[j].i0 - last.i1 <= gap_tol and (segs[j].semitone - last.semitone) * direction >= 0:
                 target = segs[j].semitone
             result.append((merged, target, True))
             i = j
@@ -415,9 +416,10 @@ def detect_glides(segs: list[RawSegment], hop_s: float, cfg: Config) -> list[tup
             for r in ramp:
                 merged = _merge(merged, r, semitone=s.semitone)
             merged.std_cents = s.std_cents
+            merged.mean_cents = s.mean_cents
             last = ramp[-1]
             target = last.semitone if not steep(last) else end_semitone(last, direction)
-            if j < len(segs) and segs[j].i0 - last.i1 <= gap_tol and (segs[j].semitone - last.semitone) * direction > 0:
+            if j < len(segs) and segs[j].i0 - last.i1 <= gap_tol and (segs[j].semitone - last.semitone) * direction >= 0:
                 target = segs[j].semitone
             result.append((merged, target, False))
             i = j
@@ -482,6 +484,25 @@ def attach_ornaments(events: list[NoteEvent], hop_s: float, cfg: Config) -> list
     return out
 
 
+def absorb_slide_ins(events: list[NoteEvent], hop_s: float, cfg: Config) -> list[NoteEvent]:
+    """A short glide that lands exactly on the following note is an approach slide (portamento into
+    the note), not a meend worth notating: fold it into that note's onset."""
+    eps = hop_s / 2
+    max_s = cfg.slide_in_max_ms / 1000
+    out: list[NoteEvent] = []
+    for k, e in enumerate(events):
+        nxt = events[k + 1] if k + 1 < len(events) else None
+        if (
+            e.kind == "glide" and e.duration < max_s and nxt is not None and nxt.start - e.end <= eps
+            and e.glide_to_midi == nxt.midi and e.grace_before is None and not e.ornament_before
+        ):
+            nxt.start = e.start
+            nxt.flags.add("slide_in")
+            continue
+        out.append(e)
+    return out
+
+
 def enforce_min_duration(events: list[NoteEvent], hop_s: float, cfg: Config) -> list[NoteEvent]:
     min_s = cfg.min_note_ms / 1000
     eps = hop_s / 2
@@ -516,6 +537,7 @@ def postprocess(segs: list[RawSegment], rms: np.ndarray | None, cents: np.ndarra
     glide_to = {k: g[1] for k, g in enumerate(glides) if g[1] is not None}
     events = to_events(segs, hop_s, glide_to)
     events = attach_ornaments(events, hop_s, cfg)
+    events = absorb_slide_ins(events, hop_s, cfg)
     events = enforce_min_duration(events, hop_s, cfg)
     events = [e for e in events if e.confidence >= cfg.min_note_conf or e.duration >= 0.3]
     return events

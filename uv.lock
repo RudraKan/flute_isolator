@@ -276,6 +276,13 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/5e/32c2b36ecdd5f588020610dab8586203acb9d9f1928401bd101620b39789/demucs_mlx-1.4.6-py3-none-any.whl", hash = "sha256:4e7ec8836ff8dae68ee9ac763659508a3b25eefdf9b1c2c3f66485efba25e3ec", size = 73791, upload-time = "2026-08-12T19:39:14.64Z" },
 ]
 
+[package.optional-dependencies]
+convert = [
+    { name = "demucs", version = "4.0.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "demucs", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "torch" },
+]
+
 [[package]]
 name = "dora-search"
 version = "0.1.13"
@@ -1079,7 +1086,7 @@ name = "sargam"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "demucs-mlx" },
+    { name = "demucs-mlx", extra = ["convert"] },
     { name = "librosa" },
     { name = "mido" },
     { name = "numpy" },
@@ -1107,7 +1114,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "demucs", marker = "extra == 'torch'", specifier = ">=4.0" },
-    { name = "demucs-mlx", specifier = ">=1.4" },
+    { name = "demucs-mlx", extras = ["convert"], specifier = ">=1.4" },
     { name = "librosa", specifier = ">=0.10" },
     { name = "mido", specifier = ">=1.3" },
     { name = "numpy", specifier = ">=1.26" },

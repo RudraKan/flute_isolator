@@ -366,8 +366,10 @@ def detect_glides(segs: list[RawSegment], hop_s: float, cfg: Config) -> list[tup
         return abs(r.slope) > cfg.glide_slope_cents_per_s and r.resid_std < 40 and r.std_cents >= 0
 
     def end_semitone(r: RawSegment, direction: int) -> int:
-        e = int(round((r.mean_cents + r.slope * r.n * hop_s / 2) / 100.0))
-        return e if e != r.semitone else r.semitone + direction
+        # linear-fit value at the segment end, rounded toward the start so a decelerating slide isn't overshot
+        e = (r.mean_cents + r.slope * r.n * hop_s / 2) / 100.0
+        semi = int(np.floor(e)) if direction > 0 else int(np.ceil(e))
+        return semi if semi != r.semitone else r.semitone + direction
 
     result: list[tuple[RawSegment, int | None, bool]] = []
     i = 0

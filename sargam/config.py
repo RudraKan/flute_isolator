@@ -11,7 +11,8 @@ class Config:
     hop_ms: float = 10.0
     fmin: float = 80.0
     fmax: float = 1000.0
-    voicing_thr: float = 0.5
+    voicing_thr: float = 0.5  # pyin voiced probability
+    voicing_thr_crepe: float = 0.75  # torchcrepe periodicity (measured on the reference song)
     pitch_backend: str = "pyin"
 
     # tuning

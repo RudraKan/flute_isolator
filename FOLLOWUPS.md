@@ -39,3 +39,6 @@ implementation rather than building it immediately.
 - Key-change segmentation: the windowed check now uses the accompaniment key profile; next step is to re-run
   tonic per segment and emit "SCALE CHANGES TO X" in the notation.
 - Tempo: beat tracking gives a bpm but sustain marks from beats are coarse; a per-phrase local tempo would be better.
+- Pitch backend comparison on the reference song (Jeena Jeena, pyin vs torchcrepe-full on MPS): pyin SER 0.40 / F1 0.75;
+  crepe needs a periodicity threshold ~0.75-0.85 to match (SER 0.40, recall 0.76 vs 0.69) and takes ~110 s vs ~10 s.
+  Next candidates: RMVPE (trained for vocals in polyphonic mixes) and SwiftF0; tune segmentation per backend.

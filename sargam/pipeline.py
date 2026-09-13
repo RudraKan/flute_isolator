@@ -52,6 +52,10 @@ def analyze(
     other: np.ndarray | None = None,
 ) -> Result:
     log: list[str] = []
+    if cfg.pitch_backend == "crepe" and cfg.voicing_thr == Config().voicing_thr:
+        from dataclasses import replace
+
+        cfg = replace(cfg, voicing_thr=cfg.voicing_thr_crepe)
     if track is None:
         track = extract_f0(vocal, sr, cfg)
     tuning = estimate_tuning_cents(track, mix, sr, cfg)

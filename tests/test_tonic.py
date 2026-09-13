@@ -98,3 +98,30 @@ def test_score_components_normalised():
     assert abs(S.sum() - 1) < 1e-6
     for v in comps.values():
         assert abs(v.sum() - 1) < 1e-6 or v.sum() == 0
+
+
+def test_snap_rare_degrees_moves_only_artefacts():
+    from sargam.model import NoteEvent
+    from sargam.tonic import snap_rare_degrees
+
+    tonic = 5  # F
+    # Bilawal-ish song: lots of S R G P D, one short unconfident komal Ga blip, one long confident komal Ga
+    notes = []
+    for i, deg in enumerate([0, 2, 4, 7, 9, 0, 2, 4, 7, 9, 0, 4]):
+        notes.append(NoteEvent(start=i, end=i + 1.0, midi=60 + tonic + deg, confidence=0.9))
+    blip = NoteEvent(start=20, end=20.1, midi=60 + tonic + 3, confidence=0.4, cents_dev=+30)
+    real = NoteEvent(start=21, end=22.5, midi=60 + tonic + 3, confidence=0.9)
+    notes += [blip, real]
+    p = scale_prof(tonic, [0, 2, 4, 7, 9, 3], [12, 2, 3, 2, 2, 1.6])
+    scale = estimate_scale(p, tonic, cfg)
+    # komal Ga mass ~ 7% here -> above snap_degree_max_mass, nothing snapped
+    assert snap_rare_degrees(notes, scale, tonic, cfg) == 0
+    p = scale_prof(tonic, [0, 2, 4, 7, 9, 3], [12, 2, 3, 2, 2, 0.5])
+    scale = estimate_scale(p, tonic, cfg)
+    # now rare; the long confident note keeps the degree's mean confidence high -> still not an artefact degree
+    assert snap_rare_degrees(notes, scale, tonic, cfg) == 0
+    real.confidence = 0.3
+    n = snap_rare_degrees(notes, scale, tonic, cfg)
+    assert n == 1  # only the short blip moves (the long note exceeds snap_max_ms)
+    assert blip.midi == 60 + tonic + 4 and "snapped" in blip.flags  # leaned sharp -> shuddha Ga
+    assert real.midi == 60 + tonic + 3

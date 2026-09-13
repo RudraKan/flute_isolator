@@ -354,32 +354,37 @@ def describe_scores(est: TonicEstimate, top: int = 3) -> list[str]:
 
 
 def snap_rare_degrees(notes: list[NoteEvent], scale: ScaleEstimate, tonic_pc: int, cfg: Config) -> int:
-    """Conservative cleanup: a short, low-confidence note on a degree the song barely uses is almost
-    always a pitch-tracking artefact; move it one semitone to the nearest degree the song does use.
-    Returns the number of notes snapped. Long or confident notes are never touched."""
+    """Conservative cleanup: notes on a degree the song barely uses *and* sings with low confidence are
+    almost always pitch-tracking artefacts (slides, breathy onsets, bleed); move each such note one
+    semitone to the neighbouring degree the song does use. Returns the number of notes snapped."""
     D = scale.degree_mass
-    present = set(scale.degrees_present)
-    n_snapped = 0
+    by_deg: dict[int, list[NoteEvent]] = {}
     for n in notes:
-        deg = (n.midi - tonic_pc) % 12
-        if deg in present or D[deg] >= cfg.degree_absent_thr:
+        by_deg.setdefault((n.midi - tonic_pc) % 12, []).append(n)
+    artefact: set[int] = set()
+    for deg, ns in by_deg.items():
+        if deg == 0 or D[deg] >= cfg.snap_degree_max_mass:
             continue
-        if n.duration >= cfg.snap_max_ms / 1000 or n.confidence >= cfg.snap_max_conf:
-            continue
-        up, down = (deg + 1) % 12, (deg - 1) % 12
-        cands = [(D[up], +1), (D[down], -1)]
-        cands = [(m, d) for m, d in cands if m >= cfg.degree_absent_thr]
-        if not cands:
-            continue
-        # prefer the neighbour the intonation leans toward when both are in use
-        if len(cands) == 2:
-            cands.sort(key=lambda c: (-(c[1] * n.cents_dev), -c[0]))
-        else:
-            cands.sort(key=lambda c: -c[0])
-        shift = cands[0][1]
-        n.midi += shift
-        if n.glide_to_midi is not None:
-            n.glide_to_midi += shift
-        n.flags.add("snapped")
-        n_snapped += 1
+        mean_conf = float(np.mean([n.confidence for n in ns]))
+        if mean_conf < cfg.snap_degree_max_conf:
+            artefact.add(deg)
+    n_snapped = 0
+    for deg in artefact:
+        for n in by_deg[deg]:
+            if n.duration >= cfg.snap_max_ms / 1000 or n.confidence >= cfg.snap_max_conf:
+                continue
+            up, down = (deg + 1) % 12, (deg - 1) % 12
+            cands = [(D[d], sh) for d, sh in ((up, +1), (down, -1)) if d not in artefact and D[d] >= cfg.degree_absent_thr]
+            if not cands:
+                continue
+            if len(cands) == 2:
+                cands.sort(key=lambda c: (-(c[1] * n.cents_dev), -c[0]))
+            else:
+                cands.sort(key=lambda c: -c[0])
+            shift = cands[0][1]
+            n.midi += shift
+            if n.glide_to_midi is not None:
+                n.glide_to_midi += shift
+            n.flags.add("snapped")
+            n_snapped += 1
     return n_snapped

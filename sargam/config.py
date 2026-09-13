@@ -70,8 +70,10 @@ class Config:
     mixed_thr: float = 0.25
     drone_peak_thr: float = 0.35
     snap_rare: bool = True  # snap short, low-confidence notes on unused degrees to the scale
-    snap_max_ms: float = 200.0
-    snap_max_conf: float = 0.75
+    snap_degree_max_mass: float = 0.06  # a degree with less mass than this may be an artefact degree...
+    snap_degree_max_conf: float = 0.55  # ...if its notes are collectively this unconfident
+    snap_max_ms: float = 450.0
+    snap_max_conf: float = 0.6
     keychange_window_s: float = 30.0
     keychange_hop_s: float = 15.0
     keychange_margin: float = 0.04

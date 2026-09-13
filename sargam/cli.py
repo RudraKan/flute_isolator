@@ -105,3 +105,39 @@ def stems(audio: Path = typer.Argument(..., exists=True), model: str = typer.Opt
 
 if __name__ == "__main__":
     app()
+
+
+@app.command()
+def truth(
+    url: str = typer.Argument(..., help="URL of a notation page (e.g. notationsworld)"),
+    slug: str = typer.Argument(..., help="Song folder name under data/songs/"),
+    sa: str | None = typer.Option(None, "--sa", help="Override the tonic if the page header is missing/wrong"),
+):
+    """Fetch a notation page and save only its sargam lines as data/songs/<slug>/truth.txt for evaluation.
+    Put the song audio next to it as audio.mp3 (or wav/m4a/flac)."""
+    import html as html_mod
+    import json
+    import re
+    import urllib.request
+
+    from .audio import DATA_DIR
+    from .swara import parse_line, parse_notation
+
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (sargam evaluation helper)"})
+    raw = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", errors="ignore")
+    txt = re.sub(r"<script.*?</script>|<style.*?</style>", " ", raw, flags=re.S)
+    txt = re.sub(r"<br\s*/?>|</p>|</div>|</h\d>|</li>|</tr>", "\n", txt)
+    txt = html_mod.unescape(re.sub(r"<[^>]+>", " ", txt))
+    page_sa, phrases = parse_notation(txt)
+    sa = sa or page_sa
+    keep = [l.strip() for l in txt.splitlines() if l.strip() and parse_line(l)]
+    if not keep:
+        console.print("[red]no notation lines found on that page[/red]")
+        raise typer.Exit(1)
+    d = DATA_DIR / "songs" / slug
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "truth.txt").write_text((f"SCALE OF THE FLUTE IS {sa}\n" if sa else "") + "\n".join(keep) + "\n")
+    meta = {"sa": sa, "source": url}
+    (d / "meta.json").write_text(json.dumps(meta, indent=1))
+    n_notes = sum(1 for p in phrases for t in p if t.kind == "note")
+    console.print(f"[green]saved[/green] {d / 'truth.txt'}: Sa={sa}, {len(keep)} lines, {n_notes} notes. Add audio as {d / 'audio.mp3'}")

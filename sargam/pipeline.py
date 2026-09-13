@@ -12,7 +12,7 @@ from .config import Config
 from .flute import fold_octaves, recommend_flute
 from .model import F0Track, Flute, FluteRecommendation, KeyChangeWarning, NoteEvent, Phrase, ScaleEstimate, TonicEstimate, TuningEstimate
 from .notes import assign_degrees, choose_sa_octave, segment_notes, split_phrases
-from .pitch import extract_f0
+from .pitch import extract_f0, load_track, save_track
 from .tonic import Profiles, build_profiles, detect_key_changes, estimate_scale, estimate_tonic, snap_rare_degrees
 from .tuning import estimate_tuning_cents, refine_sa_hz
 
@@ -107,7 +107,17 @@ def run(
         stems = separate(path, cfg.sr, model=model)
         vocal, bass, other, backend = stems.vocals, stems.bass, stems.other, stems.backend
         say(f"separated with {backend}")
-    say("tracking pitch")
-    res = analyze(vocal, mix, bass, cfg.sr, cfg, sa_override, flutes, use_beats, fold, source=str(path), other=other)
+    say(f"tracking pitch ({cfg.pitch_backend})")
+    track = None
+    if not no_separate:
+        from .audio import cache_dir
+
+        f0_path = cache_dir(path) / f"f0_{cfg.pitch_backend}.npz"
+        if f0_path.exists():
+            track = load_track(f0_path)
+        else:
+            track = extract_f0(vocal, cfg.sr, cfg)
+            save_track(f0_path, track)
+    res = analyze(vocal, mix, bass, cfg.sr, cfg, sa_override, flutes, use_beats, fold, source=str(path), other=other, track=track)
     res.separation_backend = backend
     return res

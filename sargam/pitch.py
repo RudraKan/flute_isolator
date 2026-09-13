@@ -43,8 +43,18 @@ def extract_f0(y: np.ndarray, sr: int, cfg: Config, backend: str | None = None) 
     raise ValueError(f"unknown pitch backend {backend!r}")
 
 
-def extract_f0_crepe(y: np.ndarray, sr: int, cfg: Config) -> F0Track:  # pragma: no cover - optional
-    """torchcrepe backend (install with `uv add torchcrepe torch`)."""
+def _torch_device() -> str:
+    import torch
+
+    if torch.backends.mps.is_available():
+        return "mps"
+    if torch.cuda.is_available():
+        return "cuda"
+    return "cpu"
+
+
+def extract_f0_crepe(y: np.ndarray, sr: int, cfg: Config) -> F0Track:
+    """torchcrepe backend (`uv add torchcrepe`). Uses the Apple GPU (MPS) or CUDA when available."""
     import librosa
     import torch
     import torchcrepe
@@ -53,12 +63,26 @@ def extract_f0_crepe(y: np.ndarray, sr: int, cfg: Config) -> F0Track:  # pragma:
     hop = int(16000 * cfg.hop_ms / 1000)
     audio = torch.from_numpy(y16)[None]
     f0, periodicity = torchcrepe.predict(
-        audio, 16000, hop, cfg.fmin, cfg.fmax, model="full", return_periodicity=True, batch_size=512,
-        device="cpu",
+        audio, 16000, hop, cfg.fmin, cfg.fmax, model="full", return_periodicity=True, batch_size=1024,
+        device=_torch_device(),
     )
-    f0 = f0[0].numpy().astype(np.float64)
-    conf = periodicity[0].numpy().astype(np.float64)
+    # light smoothing of the periodicity and f0 as recommended by torchcrepe, then back to numpy
+    periodicity = torchcrepe.filter.median(periodicity, 3)
+    f0 = torchcrepe.filter.median(f0, 3)
+    f0 = f0[0].cpu().numpy().astype(np.float64)
+    conf = periodicity[0].cpu().numpy().astype(np.float64)
     f0 = np.where(conf >= 0.05, f0, np.nan)
     n = len(f0)
     times = np.arange(n) * hop / 16000
     return F0Track(times=times, f0_hz=f0, conf=conf, hop_s=hop / 16000, rms=_rms(y16, 16000, hop, n))
+
+
+def save_track(path, track: F0Track) -> None:
+    np.savez(path, times=track.times, f0_hz=track.f0_hz, conf=track.conf, hop_s=track.hop_s,
+             rms=track.rms if track.rms is not None else np.array([]))
+
+
+def load_track(path) -> F0Track:
+    z = np.load(path)
+    rms = z["rms"] if z["rms"].size else None
+    return F0Track(times=z["times"], f0_hz=z["f0_hz"], conf=z["conf"], hop_s=float(z["hop_s"]), rms=rms)

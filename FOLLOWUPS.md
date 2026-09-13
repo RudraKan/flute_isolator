@@ -38,6 +38,4 @@ implementation rather than building it immediately.
   energy relative to the song's vocal level, or drop phrases shorter than ~2 notes and 0.3 s.
 - Key-change segmentation: the windowed check now uses the accompaniment key profile; next step is to re-run
   tonic per segment and emit "SCALE CHANGES TO X" in the notation.
-- Ground-truth loader: notationsworld pages use "SCALE OF THE SONG IS F MAJOR" as well as "SCALE OF THE FLUTE IS";
-  a small fetch-and-parse helper (`sargam truth <url> <slug>`) would make adding evaluation songs one command.
 - Tempo: beat tracking gives a bpm but sustain marks from beats are coarse; a per-phrase local tempo would be better.

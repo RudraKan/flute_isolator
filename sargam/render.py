@@ -16,7 +16,8 @@ from .tonic import describe_scores
 def header_lines(res: Result) -> list[str]:
     t = res.tonic
     lines = [f"SCALE OF THE FLUTE IS {t.name}"]
-    lines.append(f"Sa = {t.name} ({t.sa_hz:.1f} Hz)  scale: {res.scale.name}")
+    mode = f", key {t.name} {t.mode}" if t.mode else ""
+    lines.append(f"Sa = {t.name} ({t.sa_hz:.1f} Hz)  scale: {res.scale.name}{mode}")
     conf = f"tonic confidence: {t.label} (margin {t.margin:.3f})"
     if t.overridden:
         conf = "tonic set by --sa; " + conf
@@ -66,7 +67,7 @@ def to_json(res: Result) -> dict:
         "tuning_cents": round(res.tuning.offset_cents, 1),
         "tonic": {
             "name": t.name, "pc": t.pc, "sa_hz": round(t.sa_hz, 2), "sa_midi": t.sa_midi, "confidence": round(t.confidence, 3),
-            "margin": round(t.margin, 4), "label": t.label, "ambiguity": t.ambiguity, "overridden": t.overridden,
+            "margin": round(t.margin, 4), "label": t.label, "ambiguity": t.ambiguity, "overridden": t.overridden, "mode": t.mode,
             "scores": {pitch_name(i): round(float(s), 4) for i, s in enumerate(t.scores)},
             "components": {k: [round(float(x), 4) for x in v] for k, v in t.components.items()},
         },

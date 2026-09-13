@@ -49,6 +49,7 @@ def analyze(
     fold: bool = False,
     source: str = "",
     track: F0Track | None = None,
+    other: np.ndarray | None = None,
 ) -> Result:
     log: list[str] = []
     if track is None:
@@ -57,13 +58,13 @@ def analyze(
     log.append(f"tuning {tuning.offset_cents:+.1f} cents ({tuning.source}, spread {tuning.spread_cents:.1f})")
     notes = segment_notes(track, tuning.offset_cents, cfg)
     phrases = split_phrases(notes, cfg.phrase_gap_s)
-    profiles = build_profiles(notes, phrases, track, tuning.offset_cents, mix, bass, sr, cfg)
+    profiles = build_profiles(notes, phrases, track, tuning.offset_cents, mix, bass, sr, cfg, other=other)
     tonic = estimate_tonic(profiles, cfg, override=sa_override)
     sa_midi = choose_sa_octave(notes, tonic.pc)
     tonic.sa_midi = sa_midi
     tonic.sa_hz = refine_sa_hz(track, tuning.offset_cents, sa_midi, cfg)
     scale = estimate_scale(profiles, tonic.pc, cfg)
-    key_changes = detect_key_changes(notes, phrases, tonic.pc, cfg)
+    key_changes = detect_key_changes(notes, phrases, tonic.pc, cfg, profiles)
     flute = recommend_flute(notes, tonic.pc, flutes, cfg, sa_midi=sa_midi)
     if fold and not flute.fits:
         fold_octaves(notes, sa_midi, cfg)
@@ -94,15 +95,15 @@ def run(
     say(f"loading {path.name}")
     mix = load_mono(path, cfg.sr)
     if no_separate:
-        vocal, bass, backend = mix, None, "none"
+        vocal, bass, other, backend = mix, None, None, "none"
     else:
         from .separate import separate
 
         say("separating vocals (Demucs)")
         stems = separate(path, cfg.sr, model=model)
-        vocal, bass, backend = stems.vocals, stems.bass, stems.backend
+        vocal, bass, other, backend = stems.vocals, stems.bass, stems.other, stems.backend
         say(f"separated with {backend}")
     say("tracking pitch")
-    res = analyze(vocal, mix, bass, cfg.sr, cfg, sa_override, flutes, use_beats, fold, source=str(path))
+    res = analyze(vocal, mix, bass, cfg.sr, cfg, sa_override, flutes, use_beats, fold, source=str(path), other=other)
     res.separation_backend = backend
     return res

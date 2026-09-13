@@ -54,12 +54,15 @@ class Config:
     phrase_gap_s: float = 0.35
 
     # tonic scoring weights
-    w_dur: float = 0.30
-    w_end: float = 0.25
-    w_bass: float = 0.20
-    w_mix: float = 0.12
+    w_dur: float = 0.20
+    w_end: float = 0.15
+    w_key: float = 0.30  # key-profile correlation on the separated accompaniment
+    w_key_unseparated: float = 0.15  # same component when only the mix is available
+    w_bass: float = 0.15
+    w_mix: float = 0.07
     w_frame: float = 0.08
     w_onset: float = 0.05
+    key_temp: float = 0.08
     softmax_temp: float = 0.03
     margin_high: float = 0.06
     margin_medium: float = 0.025

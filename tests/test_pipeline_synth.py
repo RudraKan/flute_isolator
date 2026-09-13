@@ -66,10 +66,12 @@ def test_detuned_sa(detune):
 
 
 def test_relative_minor_trap_with_pad():
-    # Asavari melody over a pad of the relative-major triad (g D n = degrees 3, 8, 10 -> the major chord on komal Ga)
+    # Asavari (natural minor) melody over a typical minor-key progression: i, VI, III, VII
+    # (relative to Sa=A: Am, F, C, G). The pitch set equals the relative major's; Sa must still be A.
     text = "S R g m P d n S' -\nS' n d P m g R S - -\nd P m g R S - - -\n"
-    r, res = run_synth(text, sa_pc=9, pad=[(3, 7, 10), (3, 7, 10), (8, 0, 3)], pad_db=-12)
+    r, res = run_synth(text, sa_pc=9, pad=[(0, 3, 7), (8, 0, 3), (3, 7, 10), (10, 2, 5)], pad_db=-12)
     assert res.tonic.pc == 9, (res.tonic.name, res.tonic.ambiguity)
+    assert res.tonic.mode == "minor"
 
 
 def test_fifth_trap_pa_held_longer():

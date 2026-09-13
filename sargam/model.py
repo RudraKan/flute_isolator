@@ -69,6 +69,7 @@ class TonicEstimate:
     scores: np.ndarray
     components: dict[str, np.ndarray]
     overridden: bool = False
+    mode: str | None = None  # 'major' / 'minor' from the key profile, informational
 
 
 @dataclass

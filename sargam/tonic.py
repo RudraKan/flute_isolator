@@ -45,6 +45,25 @@ class Profiles:
     end: np.ndarray
     mix: np.ndarray | None
     bass: np.ndarray | None
+    acc: np.ndarray | None = None  # chroma of the harmonic accompaniment (other + bass stems)
+    acc_separated: bool = False  # True when acc comes from separated stems rather than the mix
+    acc_frames: np.ndarray | None = None  # (12, T) per-frame accompaniment chroma
+    acc_hop_s: float = 0.0
+
+
+# Temperley key profiles (flatter than Krumhansl-Kessler; better margin on pop accompaniment)
+KEY_MAJOR = np.array([5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0])
+KEY_MINOR = np.array([5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0])
+
+
+def key_correlations(chroma12: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """(major[12], minor[12]) Pearson correlations of the chroma with each key's profile."""
+    c = np.asarray(chroma12, dtype=np.float64)
+    if c.std() == 0:
+        return np.zeros(12), np.zeros(12)
+    maj = np.array([np.corrcoef(np.roll(c, -t), KEY_MAJOR)[0, 1] for t in range(12)])
+    mn = np.array([np.corrcoef(np.roll(c, -t), KEY_MINOR)[0, 1] for t in range(12)])
+    return np.nan_to_num(maj), np.nan_to_num(mn)
 
 
 def _norm(v: np.ndarray) -> np.ndarray:
@@ -109,7 +128,7 @@ def bass_activity(y: np.ndarray, sr: int, hop: int = 2048) -> tuple[np.ndarray, 
 
 def build_profiles(
     notes: list[NoteEvent], phrases: list[Phrase], track: F0Track, tuning_cents: float,
-    mix: np.ndarray | None, bass: np.ndarray | None, sr: int, cfg: Config,
+    mix: np.ndarray | None, bass: np.ndarray | None, sr: int, cfg: Config, other: np.ndarray | None = None,
 ) -> Profiles:
     dur, onset, end = np.zeros(12), np.zeros(12), np.zeros(12)
     for n in notes:
@@ -129,14 +148,29 @@ def build_profiles(
         mask, active = bass_activity(bass, sr)
         if active > 0.2:
             bassp = chroma_profile(bass, sr, tuning_cents, mask, fmin_note="C1")[0]
-    return Profiles(dur=_norm(dur), frame=_norm(frame), fine120=fine, onset=_norm(onset), end=_norm(end), mix=mixp, bass=bassp)
+    acc, acc_sep, acc_frames = None, False, None
+    if other is not None and len(other) > sr:
+        acc_y = other + bass if (bass is not None and len(bass) == len(other)) else other
+        if float(np.sqrt(np.mean(acc_y**2))) > 1e-3:
+            acc, acc_frames = chroma_profile(acc_y, sr, tuning_cents)
+            acc_sep = True
+    if acc is None and mix is not None and len(mix) > sr:
+        acc, acc_frames = chroma_profile(mix, sr, tuning_cents)
+    return Profiles(
+        dur=_norm(dur), frame=_norm(frame), fine120=fine, onset=_norm(onset), end=_norm(end), mix=mixp, bass=bassp,
+        acc=acc, acc_separated=acc_sep, acc_frames=acc_frames, acc_hop_s=2048 / sr,
+    )
 
 
 # ---------------------------------------------------------------- scoring
 
 
 def score_tonics(p: Profiles, cfg: Config) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    comps: dict[str, np.ndarray] = {k: np.zeros(12) for k in ("dur", "end", "bass", "mix", "frame", "onset")}
+    comps: dict[str, np.ndarray] = {k: np.zeros(12) for k in ("dur", "end", "key", "bass", "mix", "frame", "onset")}
+    if p.acc is not None:
+        maj, mn = key_correlations(p.acc)
+        best = np.maximum(maj, mn)
+        comps["key"] = np.exp((best - best.max()) / cfg.key_temp)
     for t in range(12):
         d, e, o, f = _rot(p.dur, t), _rot(p.end, t), _rot(p.onset, t), _rot(p.frame, t)
         comps["dur"][t] = d[0] + 0.6 * d[7]
@@ -148,7 +182,11 @@ def score_tonics(p: Profiles, cfg: Config) -> tuple[np.ndarray, dict[str, np.nda
             comps["bass"][t] = b[0] + 0.5 * b[7] + 0.3 * b[5]
         if p.mix is not None:
             comps["mix"][t] = float(np.dot(_rot(p.mix, t), K_TONIC)) / K_TONIC.sum()
-    weights = {"dur": cfg.w_dur, "end": cfg.w_end, "bass": cfg.w_bass, "mix": cfg.w_mix, "frame": cfg.w_frame, "onset": cfg.w_onset}
+    weights = {"dur": cfg.w_dur, "end": cfg.w_end, "key": cfg.w_key, "bass": cfg.w_bass, "mix": cfg.w_mix, "frame": cfg.w_frame, "onset": cfg.w_onset}
+    if p.acc is None:
+        weights["key"] = 0.0
+    elif not p.acc_separated:
+        weights["key"] = cfg.w_key_unseparated
     if p.bass is None:
         weights["bass"] = 0.0
     if p.mix is None:
@@ -192,9 +230,13 @@ def estimate_tonic(p: Profiles, cfg: Config, override: str | None = None) -> Ton
     pc, overridden = best, False
     if override is not None:
         pc, overridden = parse_sa_override(override), True
+    mode = None
+    if p.acc is not None:
+        maj, mn = key_correlations(p.acc)
+        mode = "major" if maj[pc] >= mn[pc] else "minor"
     return TonicEstimate(
         pc=pc, name=pitch_name(pc), sa_hz=0.0, sa_midi=0, confidence=float(probs[best]), margin=margin,
-        label=_label(margin, cfg), ambiguity=ambiguity, scores=S, components=comps, overridden=overridden,
+        label=_label(margin, cfg), ambiguity=ambiguity, scores=S, components=comps, overridden=overridden, mode=mode,
     )
 
 
@@ -248,7 +290,9 @@ def estimate_scale(p: Profiles, tonic_pc: int, cfg: Config) -> ScaleEstimate:
 # ---------------------------------------------------------------- key changes
 
 
-def detect_key_changes(notes: list[NoteEvent], phrases: list[Phrase], global_pc: int, cfg: Config) -> list[KeyChangeWarning]:
+def detect_key_changes(notes: list[NoteEvent], phrases: list[Phrase], global_pc: int, cfg: Config, p: Profiles | None = None) -> list[KeyChangeWarning]:
+    """Windowed tonic scoring (melodic components + windowed accompaniment key profile).
+    Two consecutive windows disagreeing with the global tonic by a clear margin raise a warning."""
     if not notes:
         return []
     t_end = max(n.end for n in notes)
@@ -260,14 +304,22 @@ def detect_key_changes(notes: list[NoteEvent], phrases: list[Phrase], global_pc:
         win = [n for n in notes if t0 <= n.start < t1]
         if sum(n.duration for n in win) < 5.0:
             t0 += cfg.keychange_hop_s
+            run = []
             continue
         dur, end = np.zeros(12), np.zeros(12)
         for n in win:
             dur[n.midi % 12] += n.duration
-        for p in phrases:
-            if p.notes and t0 <= p.notes[-1].start < t1:
-                end[p.notes[-1].midi % 12] += p.notes[-1].duration
-        prof = Profiles(dur=_norm(dur), frame=_norm(dur), fine120=np.zeros(120), onset=_norm(dur), end=_norm(end), mix=None, bass=None)
+        for ph in phrases:
+            if ph.notes and t0 <= ph.notes[-1].start < t1:
+                end[ph.notes[-1].midi % 12] += ph.notes[-1].duration
+        acc = None
+        if p is not None and p.acc_frames is not None and p.acc_hop_s > 0:
+            i0, i1 = int(t0 / p.acc_hop_s), int(t1 / p.acc_hop_s)
+            seg = p.acc_frames[:, i0:i1]
+            if seg.shape[1] > 0:
+                acc = _norm(seg.mean(axis=1))
+        prof = Profiles(dur=_norm(dur), frame=_norm(dur), fine120=np.zeros(120), onset=_norm(dur), end=_norm(end), mix=None, bass=None,
+                        acc=acc, acc_separated=bool(p.acc_separated) if p is not None else False)
         S, _ = score_tonics(prof, cfg)
         order = np.argsort(-S)
         best, margin = int(order[0]), float(S[order[0]] - S[order[1]])
@@ -276,9 +328,9 @@ def detect_key_changes(notes: list[NoteEvent], phrases: list[Phrase], global_pc:
                 run.append((t0, t1, best, margin))
             else:
                 run = [(t0, t1, best, margin)]
-            if len(run) >= 2 and (not warnings or warnings[-1].local_tonic_pc != best or warnings[-1].end_s < run[0][0]):
+            if len(run) == 2:
                 warnings.append(KeyChangeWarning(run[0][0], min(t1, t_end), best, margin))
-            elif len(run) >= 2:
+            elif len(run) > 2:
                 warnings[-1].end_s = min(t1, t_end)
         else:
             run = []
@@ -296,6 +348,6 @@ def describe_scores(est: TonicEstimate, top: int = 3) -> list[str]:
         k = int(k)
         rel = (k - best) % 12
         tag = "" if k == best else f"  ({pitch_name(k)} is {rel_names.get(rel, '?')} of {pitch_name(best)})"
-        comps = " ".join(f"{name}={est.components[name][k]:.2f}" for name in ("dur", "end", "bass", "mix", "frame", "onset"))
+        comps = " ".join(f"{name}={est.components[name][k]:.2f}" for name in ("dur", "end", "key", "bass", "mix", "frame", "onset"))
         lines.append(f"{pitch_name(k):>2}  score={est.scores[k]:.3f}  {comps}{tag}")
     return lines

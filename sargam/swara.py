@@ -23,7 +23,7 @@ SYMBOL_TO_DEGREE = {s: i for i, s in enumerate(DEGREE_SYMBOLS)}
 _LETTERS = set(DEGREE_SYMBOLS)
 
 HEADER_RE = re.compile(
-    r"SCALE\s+OF\s+THE\s+FLUTE\s+IS\s+([A-G][#b♯♭]?)|^\s*(?:SA|SCALE|TONIC)\s*[:=]\s*([A-G][#b♯♭]?)",
+    r"SCALE\s+OF\s+THE\s+(?:FLUTE|SONG)\s+IS\s+([A-G][#b♯♭]?)|^\s*(?:SA|SCALE|TONIC)\s*[:=]\s*([A-G][#b♯♭]?)",
     re.IGNORECASE | re.MULTILINE,
 )
 

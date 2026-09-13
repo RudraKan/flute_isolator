@@ -113,3 +113,11 @@ def test_render_notation_blocks_and_header():
     assert lines[2] == "S R" and lines[3] == "S R" and lines[4] == "" and lines[5] == "S R"
     sa_name, parsed = parse_notation(out)
     assert sa_name == "C" and len(parsed) == 5
+
+
+def test_dot_duration_dialect():
+    toks = parse_line("G..m.. R..G..R.S.R.. .P.S\u2019.")
+    syms = [str(t) for t in toks]
+    assert syms == ["G", "-", "m", "-", "R", "-", "G", "-", "R", "S", "R", "-", ".P", "S'"]
+    assert parse_line("S. R. G.") is not None  # short dialect line still parses
+    assert parse_line("a line of words with dots... here.") is None

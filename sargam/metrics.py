@@ -70,6 +70,7 @@ class Report:
     tonic_ok: bool | None
     tonic_relation: str | None
     ser: float
+    ser_no_octave: float
     precision: float
     recall: float
     f1: float
@@ -82,7 +83,7 @@ class Report:
         return "\n".join(
             [
                 f"tonic: pred {self.tonic_pred} truth {self.tonic_truth} -> {'OK' if self.tonic_ok else 'MISS' if self.tonic_ok is False else 'n/a'}{rel}",
-                f"sargam error rate (SER): {self.ser:.3f}   ({self.n_pred} pred vs {self.n_truth} truth symbols)",
+                f"sargam error rate (SER): {self.ser:.3f}  octave-insensitive {self.ser_no_octave:.3f}   ({self.n_pred} pred vs {self.n_truth} truth symbols)",
                 f"aligned precision {self.precision:.2f}  recall {self.recall:.2f}  F1 {self.f1:.2f}",
                 f"scale (degree set) jaccard: {self.scale_jaccard:.2f}",
             ]
@@ -98,6 +99,9 @@ def compare_tokens(pred_tokens: list[Token], truth_tokens: list[Token], pred_ton
     pred = collapse_tokens(pred_tokens, keep_octave)
     truth = collapse_tokens(truth_tokens, keep_octave)
     ser = levenshtein(pred, truth) / max(1, len(truth))
+    pred_o = collapse_tokens(pred_tokens, False)
+    truth_o = collapse_tokens(truth_tokens, False)
+    ser_no_octave = levenshtein(pred_o, truth_o) / max(1, len(truth_o))
     p, r, f = aligned_f1(pred, truth)
     ps = {t.degree for t in pred_tokens if t.kind == "note"}
     ts = {t.degree for t in truth_tokens if t.kind == "note"}
@@ -106,7 +110,7 @@ def compare_tokens(pred_tokens: list[Token], truth_tokens: list[Token], pred_ton
     if pred_tonic and truth_tonic:
         pp, tp = parse_pitch_name(pred_tonic), parse_pitch_name(truth_tonic)
         ok, rel = pp == tp, _relation(pp, tp)
-    return Report(pred_tonic, truth_tonic, ok, rel, ser, p, r, f, jac, len(pred), len(truth))
+    return Report(pred_tonic, truth_tonic, ok, rel, ser, ser_no_octave, p, r, f, jac, len(pred), len(truth))
 
 
 def compare_files(notes_json: str | Path, truth_txt: str | Path) -> Report:

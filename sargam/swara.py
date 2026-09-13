@@ -157,11 +157,44 @@ def parse_word(word: str) -> list[Token]:
     return tokens
 
 
+_DOT_DIALECT_RE = re.compile(r"[SRGMPDNsrgmpdn]['\u2019]*\.+")
+_DOT_ATOM_RE = re.compile(r"(\.?)([SRGMPDNsrgmpdn])(['\u2019]*)(\.*)")
+
+
+def _normalise(line: str) -> str:
+    return line.replace("\u2019", "'").replace("\u2018", "'").replace("\u2013", "-").replace("\u2014", "-")
+
+
+def _dot_dialect_to_ours(line: str) -> str | None:
+    """Convert 'G..m.. R.S.R..' (dots after a note = duration units) into 'G - m - R S R -'.
+    A dot at the start of a chunk is still a lower-octave mark. Returns None if the line doesn't convert."""
+    words = []
+    for w in line.split():
+        pos, out = 0, []
+        while pos < len(w):
+            m = _DOT_ATOM_RE.match(w, pos)
+            if not m:
+                return None
+            pre, letter, quotes, dots = m.groups()
+            out.append(pre + letter + quotes)
+            out.extend(["-"] * max(0, len(dots) - 1))
+            pos = m.end()
+        words.append(" ".join(out))
+    return " ".join(words)
+
+
 def parse_line(line: str) -> list[Token] | None:
-    """Parse a line of notation. Returns None if the line looks like lyrics/prose."""
+    """Parse a line of notation. Returns None if the line looks like lyrics/prose.
+
+    Accepts our grammar and the common 'dot-duration' dialect used on notation sites."""
+    line = _normalise(line)
     words = line.split()
     if not words:
         return None
+    if len(_DOT_DIALECT_RE.findall(line)) >= 3:
+        converted = _dot_dialect_to_ours(line)
+        if converted is not None:
+            line, words = converted, converted.split()
     parsed: list[list[Token]] = []
     ok = 0
     for w in words:

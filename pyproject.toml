@@ -1,0 +1,37 @@
+[project]
+name = "sargam"
+version = "0.1.0"
+description = "Transcribe any song into playable bansuri sargam notation"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "librosa>=0.10",
+    "soundfile>=0.12",
+    "mido>=1.3",
+    "pretty_midi>=0.2.10",
+    "typer>=0.12",
+    "rich>=13",
+    "demucs-mlx>=1.4",
+]
+
+[project.optional-dependencies]
+torch = ["demucs>=4.0", "torch>=2.2", "torchaudio>=2.2"]
+
+[project.scripts]
+sargam = "sargam.cli:app"
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-timeout>=2.3"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: needs real songs under data/songs (deselect with -m 'not slow')"]
+addopts = "-m 'not slow'"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sargam"]

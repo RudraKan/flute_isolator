@@ -151,3 +151,11 @@ def test_split_phrases_and_degrees():
 def test_empty_track():
     tr = make_track([(0.5, None)])
     assert segment_notes(tr, 0.0, cfg) == []
+
+
+def test_drifting_note_is_not_a_glide():
+    # a 140 ms Pa whose pitch sags by ~100 cents between Dha and Ga must stay a note (expressive intonation)
+    tr = make_track([(0.3, 69), (0.14, 67, {"glide_to": 66}), (0.3, 64)])
+    notes = segment_notes(tr, 0.0, cfg)
+    assert midis(notes) == [69, 67, 64]
+    assert all(n.kind == "note" for n in notes)

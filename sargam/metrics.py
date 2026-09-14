@@ -113,11 +113,26 @@ def compare_tokens(pred_tokens: list[Token], truth_tokens: list[Token], pred_ton
     return Report(pred_tonic, truth_tonic, ok, rel, ser, ser_no_octave, p, r, f, jac, len(pred), len(truth))
 
 
+def tokens_from_json(data: dict) -> list[Token]:
+    """Prediction tokens from notes.json with ornaments/graces expanded to plain notes (reference style)."""
+    sa = data["tonic"]["sa_midi"]
+    out: list[Token] = []
+    for n in data["notes"]:
+        pre = list(n.get("ornament_before") or [])
+        if n.get("grace_before") is not None:
+            pre.append(n["grace_before"])
+        for m in pre:
+            rel = m - sa
+            out.append(Token("note", rel % 12, rel // 12))
+        out.append(Token("note", n["degree"], n["octave"]))
+    return out
+
+
 def compare_files(notes_json: str | Path, truth_txt: str | Path) -> Report:
     from .swara import Token
 
     data = json.loads(Path(notes_json).read_text())
-    pred_tokens = [Token("note", n["degree"], n["octave"]) for n in data["notes"]]
+    pred_tokens = tokens_from_json(data)
     truth_tonic, truth_phrases = parse_notation(Path(truth_txt).read_text())
     truth_tokens = [t for p in truth_phrases for t in p]
     return compare_tokens(pred_tokens, truth_tokens, data["tonic"]["name"], truth_tonic)

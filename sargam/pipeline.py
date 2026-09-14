@@ -11,7 +11,7 @@ from .beats import BeatGrid, track_beats
 from .config import Config
 from .flute import fold_octaves, recommend_flute
 from .model import F0Track, Flute, FluteRecommendation, KeyChangeWarning, NoteEvent, Phrase, ScaleEstimate, TonicEstimate, TuningEstimate
-from .notes import assign_degrees, choose_sa_octave, segment_notes, split_phrases
+from .notes import assign_degrees, choose_sa_octave, segment_notes, simplify_notes, split_phrases
 from .pitch import extract_f0, load_track, save_track
 from .tonic import Profiles, build_profiles, detect_key_changes, estimate_scale, estimate_tonic, snap_rare_degrees
 from .tuning import estimate_tuning_cents, refine_sa_hz
@@ -72,6 +72,11 @@ def analyze(
         k = snap_rare_degrees(notes, scale, tonic.pc, cfg)
         if k:
             log.append(f"snapped {k} short off-scale notes onto the detected scale")
+    if cfg.simplify_min_ms > 0:
+        before = len(notes)
+        notes = simplify_notes(notes, cfg.simplify_min_ms, cfg.simplify_gap_ms)
+        phrases = split_phrases(notes, cfg.phrase_gap_s)
+        log.append(f"simplified {before} -> {len(notes)} notes (fragments < {cfg.simplify_min_ms:.0f} ms merged)")
     key_changes = detect_key_changes(notes, phrases, tonic.pc, cfg, profiles)
     flute = recommend_flute(notes, tonic.pc, flutes, cfg, sa_midi=sa_midi)
     if fold and not flute.fits:

@@ -42,3 +42,13 @@ implementation rather than building it immediately.
 - Pitch backend comparison on the reference song (Jeena Jeena, pyin vs torchcrepe-full on MPS): pyin SER 0.40 / F1 0.75;
   crepe needs a periodicity threshold ~0.75-0.85 to match (SER 0.40, recall 0.76 vs 0.69) and takes ~110 s vs ~10 s.
   Next candidates: RMVPE (trained for vocals in polyphonic mixes) and SwiftF0; tune segmentation per backend.
+
+## After comparing against the user's reference notation for Jeena Jeena (2026-09-14)
+- Remaining error budget (pyin, plain notes): precision 0.78, recall 0.73, SER 0.41. Missed notes are quick passing
+  tones in stepwise runs; extra notes are vibrato/approach fragments in the hummed intro. torchcrepe reaches recall
+  0.85 but adds fragments; `--pitch crepe --simplify 120` gives the best F1 so far (0.77).
+- Biggest next lever is a note-level model rather than more rules: notation-site pages (audio + plain sargam, no timing)
+  are exactly the weakly-aligned dataset for the fine-tuning phase (CTC-style training of a frame->swara model on the
+  separated vocal, tonic-normalised). Start with RMVPE / SwiftF0 as the frame model.
+- Snap ornament/grace pitches to the scale too (only host notes are snapped today), or expand ornaments before snapping.
+- Phrase splitting by lyric line (Whisper) would make side-by-side comparison with references far easier than gap-based phrases.

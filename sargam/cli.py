@@ -25,7 +25,8 @@ def transcribe(
     out: Path = typer.Option(Path("out"), "--out", "-o", help="Output directory"),
     sa: str | None = typer.Option(None, "--sa", help="Override the tonic, e.g. F# or 370 (Hz)"),
     flutes: str | None = typer.Option(None, "--flutes", help="Flutes you own, e.g. 'C,G bass,F#'"),
-    detail: int = typer.Option(1, "--detail", min=0, max=2, help="0 plain notes, 1 ornaments, 2 also mark low-confidence notes"),
+    detail: int = typer.Option(0, "--detail", min=0, max=2, help="0 plain notes (default), 1 ornament/meend marks, 2 also mark low-confidence notes"),
+    style: str = typer.Option("dots", "--style", help="dots: G..m.. R.G. (notation-site style); dashes: G - m - R G"),
     no_beats: bool = typer.Option(False, "--no-beats", help="Don't use beat tracking for sustain marks"),
     fold_octaves: bool = typer.Option(False, "--fold-octaves", help="Shift out-of-range notes by octaves into the bansuri range"),
     no_separate: bool = typer.Option(False, "--no-separate", help="Skip Demucs (input is already an isolated vocal)"),
@@ -34,18 +35,19 @@ def transcribe(
     times: bool = typer.Option(False, "--times", help="Prefix each phrase with its start time"),
     diag: bool = typer.Option(False, "--diag", help="Print tonic candidate table and degree histogram"),
     no_snap: bool = typer.Option(False, "--no-snap", help="Keep short off-scale notes instead of snapping them to the scale"),
+    simplify: float = typer.Option(0.0, "--simplify", help="Merge fragments shorter than this many ms into neighbours (fewer, longer notes)"),
 ):
     """Transcribe a song into sargam notation (text), timed notes (JSON) and a MIDI melody."""
     from .flute import parse_flutes
     from .pipeline import run
     from .render import diagnostics, to_text, write_outputs
 
-    cfg = _cfg(pitch_backend=backend, snap_rare=not no_snap)
+    cfg = _cfg(pitch_backend=backend, snap_rare=not no_snap, simplify_min_ms=simplify)
     owned = parse_flutes(flutes)
     with console.status("working...") as status:
         res = run(audio, cfg, sa, owned, not no_beats, fold_octaves, model, no_separate, progress=lambda m: status.update(m))
-    paths = write_outputs(res, out, audio.stem, detail)
-    console.print(to_text(res, detail, with_times=times))
+    paths = write_outputs(res, out, audio.stem, detail, style)
+    console.print(to_text(res, detail, with_times=times, style=style))
     if diag or res.tonic.label == "low":
         console.print("[dim]" + diagnostics(res) + "[/dim]")
     console.print(f"[green]wrote[/green] {paths['text']}  {paths['json']}  {paths['midi']}")

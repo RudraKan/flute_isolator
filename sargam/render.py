@@ -23,7 +23,7 @@ def header_lines(res: Result) -> list[str]:
         conf = "tonic set by --sa; " + conf
     lines.append(conf)
     if res.beats is not None:
-        lines.append(f"tempo: {res.beats.bpm:.0f} bpm (one '-' per extra beat)")
+        lines.append(f"tempo: {res.beats.bpm:.0f} bpm")
     lines.append(res.flute.advice)
     if t.ambiguity and t.label == "low" and not t.overridden:
         order = np.argsort(-t.scores)
@@ -34,9 +34,9 @@ def header_lines(res: Result) -> list[str]:
     return lines
 
 
-def to_text(res: Result, detail: int = 1, with_times: bool = False) -> str:
+def to_text(res: Result, detail: int = 1, with_times: bool = False, style: str = "dashes") -> str:
     beat = res.beats.period if res.beats is not None else None
-    body = render_notation(res.phrases, res.tonic.sa_midi, beat, detail, res.cfg.phrases_per_block, header_lines(res))
+    body = render_notation(res.phrases, res.tonic.sa_midi, beat, detail, res.cfg.phrases_per_block, header_lines(res), style)
     if not with_times:
         return body
     out = body.splitlines()
@@ -118,7 +118,7 @@ def diagnostics(res: Result) -> str:
     return "\n".join(lines)
 
 
-def write_outputs(res: Result, out_dir: str | Path, stem: str, detail: int = 1) -> dict[str, Path]:
+def write_outputs(res: Result, out_dir: str | Path, stem: str, detail: int = 1, style: str = "dashes") -> dict[str, Path]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     paths = {
@@ -126,7 +126,7 @@ def write_outputs(res: Result, out_dir: str | Path, stem: str, detail: int = 1) 
         "json": out / f"{stem}.notes.json",
         "midi": out / f"{stem}.melody.mid",
     }
-    paths["text"].write_text(to_text(res, detail))
+    paths["text"].write_text(to_text(res, detail, style=style))
     paths["json"].write_text(json.dumps(to_json(res), indent=1))
     to_midi(res, paths["midi"])
     return paths

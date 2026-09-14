@@ -359,11 +359,17 @@ def detect_glides(segs: list[RawSegment], hop_s: float, cfg: Config) -> list[tup
     sliding immediately, forms a glide event on its own.
     """
     short = int(cfg.vibrato_elem_max_ms / 1000 / hop_s)
+    tiny = int(0.04 / hop_s)
     min_ramp = int(cfg.glide_min_ms / 1000 / hop_s)
     gap_tol = 2
 
     def steep(r: RawSegment) -> bool:
-        return abs(r.slope) > cfg.glide_slope_cents_per_s and r.resid_std < 40 and r.std_cents >= 0
+        """A segment is part of a slide if it is a clean ramp AND either short (a staircase step) or covers a
+        real interval; a longer note that merely drifts by ~1 semitone is expressive intonation, not a meend."""
+        if not (abs(r.slope) > cfg.glide_slope_cents_per_s and r.resid_std < 40 and r.std_cents >= 0):
+            return False
+        span = abs(r.slope) * r.n * hop_s
+        return r.n < short or span >= cfg.glide_min_span_cents
 
     def end_semitone(r: RawSegment, direction: int) -> int:
         # linear-fit value at the segment end, rounded toward the start so a decelerating slide isn't overshot
@@ -388,7 +394,9 @@ def detect_glides(segs: list[RawSegment], hop_s: float, cfg: Config) -> list[tup
                 step = r.semitone - prev.semitone
                 if step == 0 or abs(step) > 3 or (direction and np.sign(step) != direction):
                     break
-                if not (steep(r) or (r.n < short and abs(step) == 1)):
+                # only genuinely sliding segments belong to a meend; a flat plateau, however short, is a
+                # passing note that the notation should keep (tiny <40 ms landings between slides are tolerated)
+                if not (steep(r) or (r.n < tiny and abs(step) == 1)):
                     break
                 direction = int(np.sign(step))
             j += 1
@@ -619,3 +627,66 @@ def assign_degrees(notes: list[NoteEvent], sa_midi: int) -> list[NoteEvent]:
         n.degree = rel % 12
         n.octave = rel // 12
     return notes
+
+
+def simplify_notes(notes: list[NoteEvent], min_ms: float, gap_ms: float = 150.0) -> list[NoteEvent]:
+    """Playability pass: repeatedly merge the shortest note below `min_ms` into the adjacent note whose pitch
+    is closest (that neighbour keeps its pitch and absorbs the time), then join same-pitch notes separated by
+    less than `gap_ms`. Ornament/grace/glide markers of absorbed notes are dropped."""
+    min_s, gap_s = min_ms / 1000.0, gap_ms / 1000.0
+    out = [n for n in notes]
+    changed = True
+    while changed and len(out) > 1:
+        changed = False
+        # shortest first so a run of fragments collapses onto the real note rather than onto each other
+        order = sorted(range(len(out)), key=lambda i: out[i].duration)
+        for i in order:
+            if i >= len(out) or out[i].duration >= min_s:
+                continue
+            e = out[i]
+            prev = out[i - 1] if i > 0 and e.start - out[i - 1].end <= gap_s else None
+            nxt = out[i + 1] if i + 1 < len(out) and out[i + 1].start - e.end <= gap_s else None
+            cands = [c for c in (prev, nxt) if c is not None]
+            if not cands:
+                continue
+            target = min(cands, key=lambda c: (abs(c.midi - e.midi), -c.duration))
+            if target is prev:
+                prev.end = max(prev.end, e.end)
+            else:
+                nxt.start = min(nxt.start, e.start)
+            target.flags.add("simplified")
+            del out[i]
+            changed = True
+            break
+    # join same-pitch neighbours across short gaps
+    joined: list[NoteEvent] = []
+    for e in out:
+        if joined and joined[-1].midi == e.midi and e.start - joined[-1].end <= gap_s and joined[-1].kind == "note":
+            joined[-1].end = e.end
+            joined[-1].flags.add("joined")
+            continue
+        joined.append(e)
+    return joined
+
+
+def expand_ornaments(notes: list[NoteEvent]) -> list[NoteEvent]:
+    """Plain-note view: murki clusters and kann swars become ordinary short notes before their host note,
+    glides lose their marker. Used for the plain rendering and for scoring against plain references."""
+    out: list[NoteEvent] = []
+    for n in notes:
+        pre: list[int] = list(n.ornament_before or [])
+        if n.grace_before is not None:
+            pre.append(n.grace_before)
+        if pre:
+            step = min(0.05, max(0.02, n.duration * 0.15))
+            t = n.start
+            for m in pre:
+                out.append(NoteEvent(start=t, end=t + step, midi=m, confidence=n.confidence, phrase_id=n.phrase_id, flags={"expanded"}))
+                t += step
+            host = NoteEvent(start=t, end=n.end, midi=n.midi, cents_dev=n.cents_dev, confidence=n.confidence,
+                             phrase_id=n.phrase_id, flags=set(n.flags))
+        else:
+            host = NoteEvent(start=n.start, end=n.end, midi=n.midi, cents_dev=n.cents_dev, confidence=n.confidence,
+                             phrase_id=n.phrase_id, flags=set(n.flags))
+        out.append(host)
+    return out

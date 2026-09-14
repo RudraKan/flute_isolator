@@ -8,7 +8,7 @@ import pytest
 
 from tests.conftest import load_meta, song_dirs
 from sargam.config import Config
-from sargam.metrics import compare_tokens
+from sargam.metrics import compare_tokens, tokens_from_json
 from sargam.pipeline import run
 from sargam.render import to_json, write_outputs
 from sargam.swara import Token, parse_notation
@@ -29,7 +29,7 @@ def test_song(song: Path):
     data = to_json(res)
     truth_sa, truth_phrases = parse_notation((song / "truth.txt").read_text())
     truth_sa = meta.get("sa", truth_sa)
-    pred_tokens = [Token("note", n["degree"], n["octave"]) for n in data["notes"]]
+    pred_tokens = tokens_from_json(data)
     truth_tokens = [t for p in truth_phrases for t in p]
     rep = compare_tokens(pred_tokens, truth_tokens, data["tonic"]["name"], truth_sa)
     line = (

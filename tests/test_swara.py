@@ -92,7 +92,8 @@ def test_render_phrase_basic_and_detail():
         _n(2.2, 2.4, 78),
     ]
     assert render_phrase(notes, sa) == "S (S)R {RS.n}G m~P .P S'"
-    assert render_phrase(notes, sa, detail=0) == "S R G m .P S'"
+    # plain rendering expands graces/ornaments into ordinary notes (reference style) and drops glide marks
+    assert render_phrase(notes, sa, detail=0) == "S S R R S .n G m .P S'"
 
 
 def test_render_sustain_from_beats_and_median():

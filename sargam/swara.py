@@ -276,8 +276,30 @@ def render_phrase(
     beat_period: float | None = None,
     median_dur: float = 0.0,
     detail: int = 1,
+    style: str = "dashes",
 ) -> str:
+    """style 'dashes': `S R - G` (one '-' per extra unit). style 'dots': `S.R..G.` as on notation sites
+    (each note followed by one dot per unit it lasts; notes of one breath group are glued, groups separated by a space)."""
     parts: list[str] = []
+    if detail == 0:
+        from .notes import expand_ornaments
+
+        notes = expand_ornaments(notes)
+    if style == "dots":
+        unit = (beat_period / 2 if beat_period else median_dur) or 0.0
+        chunks: list[str] = []
+        cur = ""
+        last_end = None
+        for n in notes:
+            if last_end is not None and n.start - last_end > 0.12 and cur:
+                chunks.append(cur)
+                cur = ""
+            units = max(1, int(round(n.duration / unit))) if unit > 0 else 1
+            cur += str(note_to_token(n, sa_midi, detail)) + "." * min(units, 6)
+            last_end = n.end
+        if cur:
+            chunks.append(cur)
+        return " ".join(chunks)
     for n in notes:
         s = str(note_to_token(n, sa_midi, detail))
         if detail >= 2 and n.confidence < 0.5:
@@ -295,6 +317,7 @@ def render_notation(
     detail: int = 1,
     phrases_per_block: int = 4,
     header_lines: list[str] | None = None,
+    style: str = "dashes",
 ) -> str:
     durs = sorted(n.duration for p in phrases for n in p.notes)
     median_dur = durs[len(durs) // 2] if durs else 0.0
@@ -304,7 +327,7 @@ def render_notation(
     for i, p in enumerate(phrases):
         if i and i % phrases_per_block == 0:
             lines.append("")
-        lines.append(render_phrase(p.notes, sa_midi, beat_period, median_dur, detail))
+        lines.append(render_phrase(p.notes, sa_midi, beat_period, median_dur, detail, style))
     return "\n".join(lines) + "\n"
 
 

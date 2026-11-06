@@ -252,15 +252,19 @@ def model_eval(
 
 @model_app.command("install")
 def model_install(checkpoint: Path = typer.Argument(..., exists=True, help="best.pt from a training run")):
-    """Copy a trained checkpoint to data/models/notenet.pt (used by --notes notenet and the web UI)."""
-    import shutil
+    """Install a trained checkpoint as data/models/notenet.pt (used by --notes notenet and the web UI).
+    Only the weights are kept (no optimiser state)."""
+    import torch
 
     from .ml.infer import default_checkpoint
 
+    ck = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    keep = {k: ck[k] for k in ("model", "hparams", "step", "decode", "val", "real") if k in ck}
+    keep["source"] = str(checkpoint)
     dst = default_checkpoint()
     dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(checkpoint, dst)
-    console.print(f"[green]installed[/green] {dst}")
+    torch.save(keep, dst)
+    console.print(f"[green]installed[/green] {dst} (step {keep.get('step')}, {dst.stat().st_size / 1e6:.0f} MB)")
 
 
 @model_app.command("bundle")

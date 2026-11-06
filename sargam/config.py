@@ -1,7 +1,7 @@
 """All tunable parameters in one frozen dataclass."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, replace
 
 
 @dataclass(frozen=True)
@@ -11,9 +11,8 @@ class Config:
     hop_ms: float = 10.0
     fmin: float = 80.0
     fmax: float = 1000.0
-    voicing_thr: float = 0.5  # pyin voiced probability
-    voicing_thr_crepe: float = 0.75  # torchcrepe periodicity (measured on the reference song)
-    pitch_backend: str = "pyin"
+    voicing_thr: float = 0.5  # pyin voiced probability; other backends: BACKEND_DEFAULTS
+    pitch_backend: str = "rmvpe"
 
     # tuning
     tuning_smooth_bins: float = 5.0
@@ -91,5 +90,23 @@ class Config:
     # rendering
     phrases_per_block: int = 4
 
+
+    def resolved(self) -> "Config":
+        """Apply the active pitch backend's BACKEND_DEFAULTS to fields still at their class default. A field set to
+        anything else is kept, so e.g. simplify_min_ms=-1 switches merging off for every backend."""
+        base = {f.name: f.default for f in fields(Config)}
+        over = {k: v for k, v in BACKEND_DEFAULTS.get(self.pitch_backend, {}).items() if getattr(self, k) == base[k]}
+        return replace(self, **over) if over else self
+
+
+# Per-backend parameters, measured on the reference song (Jeena Jeena) with the cached-track sweep.
+# The neural trackers follow vibrato and ornaments closely, so they need a stiffer note-switch cost (values
+# >= 16 are equivalent: a one-frame detour through silence costs 2 * silence_penalty + voiced_in_sil_cost)
+# and fragment merging. pyin uses the class defaults.
+BACKEND_DEFAULTS: dict[str, dict[str, float]] = {
+    "crepe": {"voicing_thr": 0.75},  # torchcrepe periodicity
+    "rmvpe": {"voicing_thr": 0.7, "switch_penalty": 16.0, "simplify_min_ms": 100.0},  # peak salience
+    "fcpe": {"voicing_thr": 0.8, "switch_penalty": 16.0, "simplify_min_ms": 80.0},  # peak latent
+}
 
 DEFAULT = Config()

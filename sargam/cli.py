@@ -31,17 +31,19 @@ def transcribe(
     fold_octaves: bool = typer.Option(False, "--fold-octaves", help="Shift out-of-range notes by octaves into the bansuri range"),
     no_separate: bool = typer.Option(False, "--no-separate", help="Skip Demucs (input is already an isolated vocal)"),
     model: str = typer.Option("htdemucs", "--model", help="Demucs model: htdemucs or htdemucs_ft"),
-    backend: str = typer.Option("pyin", "--pitch", help="Pitch tracker backend: pyin or crepe"),
+    backend: str = typer.Option(Config.pitch_backend, "--pitch", help="Pitch tracker: rmvpe (vocal model, downloads 181 MB once), pyin, crepe or fcpe"),
     times: bool = typer.Option(False, "--times", help="Prefix each phrase with its start time"),
     diag: bool = typer.Option(False, "--diag", help="Print tonic candidate table and degree histogram"),
     no_snap: bool = typer.Option(False, "--no-snap", help="Keep short off-scale notes instead of snapping them to the scale"),
-    simplify: float = typer.Option(0.0, "--simplify", help="Merge fragments shorter than this many ms into neighbours (fewer, longer notes)"),
+    simplify: float | None = typer.Option(None, "--simplify", help="Merge fragments shorter than this many ms into neighbours (fewer, longer notes); default per pitch backend (rmvpe 100, pyin 0)"),
 ):
     """Transcribe a song into sargam notation (text), timed notes (JSON) and a MIDI melody."""
     from .flute import parse_flutes
     from .pipeline import run
     from .render import diagnostics, to_text, write_outputs
 
+    if simplify == 0:
+        simplify = -1.0  # explicit 0 = off, also for backends that merge by default (Config.resolved)
     cfg = _cfg(pitch_backend=backend, snap_rare=not no_snap, simplify_min_ms=simplify)
     owned = parse_flutes(flutes)
     with console.status("working...") as status:
@@ -59,7 +61,7 @@ def audition(
     out: Path = typer.Option(Path("out"), "--out", "-o"),
     sa: str | None = typer.Option(None, "--sa"),
     no_separate: bool = typer.Option(False, "--no-separate"),
-    backend: str = typer.Option("pyin", "--pitch"),
+    backend: str = typer.Option(Config.pitch_backend, "--pitch", help="Pitch tracker: rmvpe, pyin, crepe or fcpe"),
 ):
     """Write a wav with the isolated vocal in the left channel and the transcription as a sine melody in the right."""
     import numpy as np

@@ -61,7 +61,11 @@ flute-like voice playing the transcription (or both with a balance slider); the 
 note to jump there, click a phrase number to loop it, slow down to 0.5x for practice. Keys: space play/pause,
 ←/→ previous/next phrase, L loop, Esc stop looping.
 
-"Re-analyse" re-runs with a different Sa, pitch tracker or simplify setting (stems and pitch tracks are cached, so it
+Building a training set is meant to be one click per song. You can paste the song's notationsworld link at upload
+time. Without one, the result page searches the crawled corpus for the melody (interval n-grams, so a page in a
+different Sa still matches) and offers "This looks like: … [Use as reference]".
+
+"Re-analyse" re-runs with a different Sa, pitch tracker, note engine or simplify setting (stems and pitch tracks are cached, so it
 takes seconds). "Compare with a reference" takes pasted notationsworld notation or the page URL, shows SER /
 precision / recall / F1 and a per-line diff (click a wrong note to hear that spot), and saves the reference with the
 song. Everything lives in `data/library/<id>/` (input, outputs, pickled result, `truth.txt`); `GET /api/pairs` lists

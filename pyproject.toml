@@ -15,6 +15,9 @@ dependencies = [
     "demucs-mlx[convert]>=1.4",
     "torchcrepe>=0.0.24",
     "torchfcpe>=0.0.4",
+    "fastapi>=0.162.0",
+    "uvicorn>=0.54.0",
+    "python-multipart>=0.0.33",
 ]
 
 [project.optional-dependencies]
@@ -24,7 +27,11 @@ torch = ["demucs>=4.0", "torch>=2.2", "torchaudio>=2.2"]
 sargam = "sargam.cli:app"
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-timeout>=2.3"]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8",
+    "pytest-timeout>=2.3",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -23,11 +23,19 @@ def _strip_octave(sym: str) -> str:
     return sym.replace(".", "").replace("'", "")
 
 
-def aligned_f1(pred: list[str], truth: list[str]) -> tuple[float, float, float]:
-    """Needleman-Wunsch alignment: match +1, octave-only mismatch +0.5, mismatch -1, gap -1."""
+def _sym_score(a: str, b: str) -> float:
+    if a == b:
+        return 1.0
+    if _strip_octave(a) == _strip_octave(b):
+        return 0.5
+    return -1.0
+
+
+def align_ops(pred: list[str], truth: list[str]) -> list[tuple[str, int | None, int | None]]:
+    """Needleman-Wunsch alignment (match +1, octave-only mismatch +0.5, mismatch -1, gap -1) as ordered edit ops:
+    ('match' | 'octave' | 'sub', i, j) pair pred[i] with truth[j], ('ins', i, None) is an extra predicted symbol,
+    ('del', None, j) a missed truth symbol."""
     n, m = len(pred), len(truth)
-    if n == 0 or m == 0:
-        return 0.0, 0.0, 0.0
     score = [[0.0] * (m + 1) for _ in range(n + 1)]
     for i in range(1, n + 1):
         score[i][0] = -i
@@ -35,29 +43,32 @@ def aligned_f1(pred: list[str], truth: list[str]) -> tuple[float, float, float]:
         score[0][j] = -j
     for i in range(1, n + 1):
         for j in range(1, m + 1):
-            if pred[i - 1] == truth[j - 1]:
-                s = 1.0
-            elif _strip_octave(pred[i - 1]) == _strip_octave(truth[j - 1]):
-                s = 0.5
-            else:
-                s = -1.0
+            s = _sym_score(pred[i - 1], truth[j - 1])
             score[i][j] = max(score[i - 1][j - 1] + s, score[i - 1][j] - 1, score[i][j - 1] - 1)
-    # traceback to count matches
-    i, j, matched = n, m, 0.0
+    ops: list[tuple[str, int | None, int | None]] = []
+    i, j = n, m
     while i > 0 and j > 0:
-        if pred[i - 1] == truth[j - 1]:
-            s = 1.0
-        elif _strip_octave(pred[i - 1]) == _strip_octave(truth[j - 1]):
-            s = 0.5
-        else:
-            s = -1.0
+        s = _sym_score(pred[i - 1], truth[j - 1])
         if score[i][j] == score[i - 1][j - 1] + s:
-            matched += max(s, 0.0)
+            ops.append(({1.0: "match", 0.5: "octave"}.get(s, "sub"), i - 1, j - 1))
             i, j = i - 1, j - 1
         elif score[i][j] == score[i - 1][j] - 1:
+            ops.append(("ins", i - 1, None))
             i -= 1
         else:
+            ops.append(("del", None, j - 1))
             j -= 1
+    ops.extend(("ins", k, None) for k in range(i - 1, -1, -1))
+    ops.extend(("del", None, k) for k in range(j - 1, -1, -1))
+    return ops[::-1]
+
+
+def aligned_f1(pred: list[str], truth: list[str]) -> tuple[float, float, float]:
+    """Precision/recall/F1 over the `align_ops` alignment; an octave-only mismatch counts half."""
+    n, m = len(pred), len(truth)
+    if n == 0 or m == 0:
+        return 0.0, 0.0, 0.0
+    matched = sum({"match": 1.0, "octave": 0.5}.get(op, 0.0) for op, _, _ in align_ops(pred, truth))
     p, r = matched / n, matched / m
     f = 2 * p * r / (p + r) if p + r else 0.0
     return p, r, f

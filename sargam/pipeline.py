@@ -50,15 +50,20 @@ def analyze(
     source: str = "",
     track: F0Track | None = None,
     other: np.ndarray | None = None,
+    progress=None,
 ) -> Result:
+    say = progress or (lambda *_: None)
     log: list[str] = []
     cfg = cfg.resolved()
     if track is None:
+        say(f"tracking pitch ({cfg.pitch_backend})")
         track = extract_f0(vocal, sr, cfg)
+    say("finding notes")
     tuning = estimate_tuning_cents(track, mix, sr, cfg)
     log.append(f"tuning {tuning.offset_cents:+.1f} cents ({tuning.source}, spread {tuning.spread_cents:.1f})")
     notes = segment_notes(track, tuning.offset_cents, cfg)
     phrases = split_phrases(notes, cfg.phrase_gap_s)
+    say("detecting Sa and scale")
     profiles = build_profiles(notes, phrases, track, tuning.offset_cents, mix, bass, sr, cfg, other=other)
     tonic = estimate_tonic(profiles, cfg, override=sa_override)
     sa_midi = choose_sa_octave(notes, tonic.pc)
@@ -88,6 +93,8 @@ def analyze(
         flute = recommend_flute(notes, tonic.pc, flutes, cfg, sa_midi=sa_midi)
         log.append("folded out-of-range notes by octaves")
     assign_degrees(notes, sa_midi)
+    if use_beats and mix is not None:
+        say("tracking beats")
     beats = track_beats(mix, sr) if (use_beats and mix is not None) else None
     duration = float(len(vocal) / sr)
     return Result(
@@ -131,6 +138,7 @@ def run(
         else:
             track = extract_f0(vocal, cfg.sr, cfg)
             save_track(f0_path, track)
-    res = analyze(vocal, mix, bass, cfg.sr, cfg, sa_override, flutes, use_beats, fold, source=str(path), other=other, track=track)
+    res = analyze(vocal, mix, bass, cfg.sr, cfg, sa_override, flutes, use_beats, fold, source=str(path), other=other, track=track,
+                  progress=progress)
     res.separation_backend = backend
     return res

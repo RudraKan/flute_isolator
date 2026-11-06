@@ -58,6 +58,7 @@ def summarize(res) -> dict:
         "duration_s": round(float(res.duration_s), 1),
         "n_notes": len(res.notes), "n_phrases": len(res.phrases),
         "separation": res.separation_backend, "pitch_backend": res.cfg.pitch_backend,
+        "notes_engine": getattr(res.cfg, "notes_engine", "rules"),
         "log": list(res.log),
     }
 

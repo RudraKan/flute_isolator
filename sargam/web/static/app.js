@@ -353,6 +353,7 @@ async function showResult(meta, token) {
           ${s.tempo_bpm ? `<div class="row"><span class="k">Tempo</span><span class="v">${esc(s.tempo_bpm)} bpm</span></div>` : ""}
           <div class="row"><span class="k">Range</span><span class="v">${esc(s.range)} ${s.fits ? "" : `<span class="chip warn">beyond the flute range</span>`}</span></div>
           <div class="row"><span class="k">Flute</span><span class="v">${esc(s.flute_advice)}</span></div>
+          <div class="row"><span class="k">Analysis</span><span class="v">${esc((s.pitch_backend || "").toUpperCase())} pitch · ${s.notes_engine === "notenet" ? "NoteNet (learned)" : "rule-based"} notes</span></div>
           ${warnings.join("")}
         </div>
       </div>

@@ -122,3 +122,34 @@ def test_dot_duration_dialect():
     assert syms == ["G", "-", "m", "-", "R", "-", "G", "-", "R", "S", "R", "-", ".P", "S'"]
     assert parse_line("S. R. G.") is not None  # short dialect line still parses
     assert parse_line("a line of words with dots... here.") is None
+
+
+def test_notationsworld_dialect():
+    from sargam.swara import nw_symbol, parse_nw_line
+
+    toks, used_m = parse_nw_line("G.G.R.S.n. n.S.R.G.")
+    notes = [t for t in toks if t.kind == "note"]
+    assert [(t.degree, t.octave) for t in notes[3:6]] == [(0, 0), (11, -1), (11, -1)]  # n = lower Ni, not komal
+    assert not used_m
+    toks, _ = parse_nw_line("G…P..R.R…D(k).S’..")
+    notes = [t for t in toks if t.kind == "note"]
+    assert [(t.degree, t.octave) for t in notes] == [(4, 0), (7, 0), (2, 0), (2, 0), (8, 0), (0, 1)]
+    assert sum(t.kind == "sustain" for t in toks) == 2 + 1 + 2 + 0 + 1  # '…' = three dots
+    assert parse_nw_line("Na hai ye panaa") is None
+    assert parse_nw_line("Hmm…. hmm…") is None
+    for d in range(12):
+        for o in (-1, 0, 1):
+            sym = nw_symbol(d, o)
+            got = [t for t in parse_nw_line(f"{sym}. {sym}.")[0] if t.kind == "note"][0]
+            if d == 5 and o == -1:
+                continue  # lower shuddh Ma has no site symbol; rendered as '.m'
+            assert (got.degree, got.octave) == (d, o), sym
+
+
+def test_notationsworld_ma_convention():
+    page = "SCALE OF THE SONG IS F# MAJOR\nlyrics here\nG..M..P.. G.M.R.\n"
+    sa, phrases = parse_notation(page, "nw")
+    assert sa == "F#"
+    assert {t.degree for t in phrases[0] if t.kind == "note"} == {4, 5, 7, 2}  # no 'm' on the page: M is shuddh
+    sa, phrases = parse_notation(page + "G.m.M.P.\n", "nw")
+    assert [t.degree for t in phrases[1] if t.kind == "note"] == [4, 5, 6, 7]

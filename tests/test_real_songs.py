@@ -27,7 +27,7 @@ def test_song(song: Path):
     res = run(audio, Config(), no_separate=bool(meta.get("no_separate", False)))
     write_outputs(res, song / "out", "audio")
     data = to_json(res)
-    truth_sa, truth_phrases = parse_notation((song / "truth.txt").read_text())
+    truth_sa, truth_phrases = parse_notation((song / "truth.txt").read_text(), "nw")
     truth_sa = meta.get("sa", truth_sa)
     pred_tokens = tokens_from_json(data)
     truth_tokens = [t for p in truth_phrases for t in p]

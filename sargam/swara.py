@@ -209,11 +209,107 @@ def parse_line(line: str) -> list[Token] | None:
     return [t for toks in parsed for t in toks]
 
 
-def parse_notation(text: str) -> tuple[str | None, list[list[Token]]]:
-    """Parse a notationsworld-style page or our own output.
+# ---------------------------------------------------------------- notationsworld dialect
+#
+# The site's legend: lowercase p d n = lower octave (not komal), m = shuddh Ma, M = tivra Ma, X(k) = komal,
+# S' = upper octave, dots after a note = its length in units ('…' counts as three). Pages that never write
+# a lowercase m use M for shuddh Ma.
 
-    Returns (sa pitch name or None, phrases) where each phrase is a list of tokens.
-    Lines that don't parse as notation (lyrics, headers, prose) are skipped.
+_NW_ATOM_RE = re.compile(r"(\.*)([SRGMPDNsrgpdnm])(\([kK]\))?('*)(\.*)")
+_NW_KOMAL_OK = set("RGDNrgdn")
+_NW_REPEAT_RE = re.compile(r"\(?\b(?:x\s*\d+|\d+\s*x)\b\)?", re.IGNORECASE)
+TIVRA_MA = 6
+
+
+def _nw_normalise(line: str) -> str:
+    line = _normalise(line).replace("…", "...")
+    line = _NW_REPEAT_RE.sub(" ", line)
+    return re.sub(r"[|/,]", " ", line)
+
+
+def _parse_nw_word(word: str) -> tuple[list[Token], bool]:
+    """One whitespace-free chunk of site notation. Returns (tokens, used lowercase m)."""
+    out: list[Token] = []
+    used_m = False
+    pos = 0
+    while pos < len(word):
+        if word[pos] == "-":
+            out.append(Token("sustain"))
+            pos += 1
+            continue
+        m = _NW_ATOM_RE.match(word, pos)
+        if not m:
+            raise ParseError(f"not site notation: {word!r}")
+        pre, letter, komal, quotes, dots = m.groups()
+        if pre and pos != 0:
+            raise ParseError("lower-octave dot inside a chunk")
+        if letter == "m":
+            degree, octave, used_m = 5, 0, True
+        elif letter == "M":
+            degree, octave = TIVRA_MA, 0
+        else:
+            degree, octave = SYMBOL_TO_DEGREE[letter.upper()], -1 if letter.islower() else 0
+        if komal:
+            if letter not in _NW_KOMAL_OK:
+                raise ParseError("komal on S/M/P")
+            degree -= 1
+        if quotes and octave < 0:
+            raise ParseError("both lower and upper octave marks")
+        octave += len(quotes) - len(pre)
+        out.append(Token("note", degree, octave))
+        out.extend(Token("sustain") for _ in range(max(0, len(dots) - 1)))
+        pos = m.end()
+    return out, used_m
+
+
+def parse_nw_line(line: str) -> tuple[list[Token], bool] | None:
+    """Parse one line of notationsworld notation. Returns None for lyrics/prose lines."""
+    words = _nw_normalise(line).split()
+    if not words:
+        return None
+    toks: list[Token] = []
+    ok, used_m = 0, False
+    for w in words:
+        try:
+            t, um = _parse_nw_word(w)
+        except ParseError:
+            continue
+        ok += 1
+        used_m |= um
+        toks.extend(t)
+    if ok / len(words) < 0.7 or sum(t.kind == "note" for t in toks) < 2:
+        return None
+    return toks, used_m
+
+
+def _fix_nw_ma(phrases: list[list[Token]], used_m: bool) -> None:
+    if used_m:
+        return
+    for p in phrases:
+        for t in p:
+            if t.kind == "note" and t.degree == TIVRA_MA:
+                t.degree = 5
+
+
+def nw_symbol(degree: int, octave: int = 0) -> str:
+    """Symbol in the notationsworld dialect: 'n' lower Ni, \"S'\" upper Sa, 'D(k)' komal Dha, 'm'/'M' shuddh/tivra Ma."""
+    degree %= 12
+    komal = degree in (1, 3, 8, 10)
+    base = {5: "m", 6: "M"}.get(degree) or DEGREE_SYMBOLS[degree + 1 if komal else degree]
+    suffix = "(k)" if komal else ""
+    if octave == -1 and base not in ("m", "M"):
+        return base.lower() + suffix
+    if octave < 0:
+        return "." * (-octave) + base + suffix
+    return base + suffix + "'" * octave
+
+
+def parse_notation(text: str, dialect: str = "ours") -> tuple[str | None, list[list[Token]]]:
+    """Parse a notation page or our own output.
+
+    dialect 'ours': the grammar in the module docstring (lowercase = komal). dialect 'nw': the notationsworld
+    legend (lowercase p d n = lower octave, X(k) = komal). Returns (sa pitch name or None, phrases) where each
+    phrase is a list of tokens. Lines that don't parse as notation (lyrics, headers, prose) are skipped.
     """
     sa: str | None = None
     m = HEADER_RE.search(text)
@@ -221,12 +317,21 @@ def parse_notation(text: str) -> tuple[str | None, list[list[Token]]]:
         raw = m.group(1) or m.group(2)
         sa = pitch_name(parse_pitch_name(raw))
     phrases: list[list[Token]] = []
+    page_used_m = False
     for line in text.splitlines():
         if HEADER_RE.search(line):
+            continue
+        if dialect == "nw":
+            parsed = parse_nw_line(line)
+            if parsed:
+                phrases.append(parsed[0])
+                page_used_m |= parsed[1]
             continue
         toks = parse_line(line)
         if toks:
             phrases.append(toks)
+    if dialect == "nw":
+        _fix_nw_ma(phrases, page_used_m)
     return sa, phrases
 
 
@@ -279,13 +384,14 @@ def render_phrase(
     style: str = "dashes",
 ) -> str:
     """style 'dashes': `S R - G` (one '-' per extra unit). style 'dots': `S.R..G.` as on notation sites
-    (each note followed by one dot per unit it lasts; notes of one breath group are glued, groups separated by a space)."""
+    (each note followed by one dot per unit it lasts; notes of one breath group are glued, groups separated by a space).
+    style 'nw': like 'dots' but in the notationsworld legend (lowercase = lower octave, X(k) = komal), plain notes."""
     parts: list[str] = []
-    if detail == 0:
+    if detail == 0 or style == "nw":
         from .notes import expand_ornaments
 
         notes = expand_ornaments(notes)
-    if style == "dots":
+    if style in ("dots", "nw"):
         unit = (beat_period / 2 if beat_period else median_dur) or 0.0
         chunks: list[str] = []
         cur = ""
@@ -295,7 +401,12 @@ def render_phrase(
                 chunks.append(cur)
                 cur = ""
             units = max(1, int(round(n.duration / unit))) if unit > 0 else 1
-            cur += str(note_to_token(n, sa_midi, detail)) + "." * min(units, 6)
+            if style == "nw":
+                rel = n.midi - sa_midi
+                sym = nw_symbol(rel % 12, rel // 12)
+            else:
+                sym = str(note_to_token(n, sa_midi, detail))
+            cur += sym + "." * min(units, 6)
             last_end = n.end
         if cur:
             chunks.append(cur)

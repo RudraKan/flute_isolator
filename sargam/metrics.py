@@ -128,11 +128,10 @@ def tokens_from_json(data: dict) -> list[Token]:
     return out
 
 
-def compare_files(notes_json: str | Path, truth_txt: str | Path) -> Report:
-    from .swara import Token
-
+def compare_files(notes_json: str | Path, truth_txt: str | Path, truth_dialect: str = "nw") -> Report:
+    """Reference files are notationsworld pastes, so the truth is read in that dialect by default."""
     data = json.loads(Path(notes_json).read_text())
     pred_tokens = tokens_from_json(data)
-    truth_tonic, truth_phrases = parse_notation(Path(truth_txt).read_text())
+    truth_tonic, truth_phrases = parse_notation(Path(truth_txt).read_text(), truth_dialect)
     truth_tokens = [t for p in truth_phrases for t in p]
     return compare_tokens(pred_tokens, truth_tokens, data["tonic"]["name"], truth_tonic)

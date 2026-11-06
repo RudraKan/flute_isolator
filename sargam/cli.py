@@ -26,7 +26,7 @@ def transcribe(
     sa: str | None = typer.Option(None, "--sa", help="Override the tonic, e.g. F# or 370 (Hz)"),
     flutes: str | None = typer.Option(None, "--flutes", help="Flutes you own, e.g. 'C,G bass,F#'"),
     detail: int = typer.Option(0, "--detail", min=0, max=2, help="0 plain notes (default), 1 ornament/meend marks, 2 also mark low-confidence notes"),
-    style: str = typer.Option("dots", "--style", help="dots: G..m.. R.G. (notation-site style); dashes: G - m - R G"),
+    style: str = typer.Option("dots", "--style", help="dots: G..m.. R.G. (our symbols, site-style lengths); nw: notationsworld legend (n = lower Ni, D(k) = komal); dashes: G - m - R G"),
     no_beats: bool = typer.Option(False, "--no-beats", help="Don't use beat tracking for sustain marks"),
     fold_octaves: bool = typer.Option(False, "--fold-octaves", help="Shift out-of-range notes by octaves into the bansuri range"),
     no_separate: bool = typer.Option(False, "--no-separate", help="Skip Demucs (input is already an isolated vocal)"),
@@ -123,16 +123,16 @@ def truth(
     import urllib.request
 
     from .audio import DATA_DIR
-    from .swara import parse_line, parse_notation
+    from .swara import parse_notation, parse_nw_line
 
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (sargam evaluation helper)"})
     raw = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", errors="ignore")
     txt = re.sub(r"<script.*?</script>|<style.*?</style>", " ", raw, flags=re.S)
     txt = re.sub(r"<br\s*/?>|</p>|</div>|</h\d>|</li>|</tr>", "\n", txt)
     txt = html_mod.unescape(re.sub(r"<[^>]+>", " ", txt))
-    page_sa, phrases = parse_notation(txt)
+    page_sa, phrases = parse_notation(txt, "nw")
     sa = sa or page_sa
-    keep = [l.strip() for l in txt.splitlines() if l.strip() and parse_line(l)]
+    keep = [l.strip() for l in txt.splitlines() if l.strip() and parse_nw_line(l)]
     if not keep:
         console.print("[red]no notation lines found on that page[/red]")
         raise typer.Exit(1)

@@ -395,6 +395,7 @@ async function showResult(meta, token) {
         <p class="muted small">Paste notation from notationsworld, or its page URL. The transcription is scored against it, and the
           pair is saved with this song so it can be used for evaluation and training.</p>
         <div id="savedRef"></div>
+        <div id="refSuggest"></div>
         <div class="row"><input type="url" id="refUrl" placeholder="https://www.notationsworld.com/....html">
           <button class="btn" id="refFetch">Fetch &amp; compare</button></div>
         <textarea id="refText" rows="5" placeholder="SCALE OF THE SONG IS F MAJOR&#10;G..m.. R..G..R.S.R.. G..m.. P.G.P.G.R.S.."></textarea>
@@ -438,6 +439,27 @@ async function showResult(meta, token) {
   player.attach(meta);
   await loadRender(meta.id, token);
   if (meta.truth) loadSavedReference(meta.id);
+  else loadSuggestions(meta.id);
+}
+
+async function loadSuggestions(id) {
+  const box = $("#refSuggest");
+  if (!box) return;
+  let r;
+  try { r = await api(`/api/jobs/${id}/suggest`); } catch { return; }
+  const c = (r.candidates || []).filter((x) => x.kind === "sargam" || x.kind === "piano");
+  if (!c.length || !S.item || S.item.id !== id) return;
+  const sure = c[0].margin != null && c[0].margin >= 1.3;
+  const item = (x) => `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>
+      <span class="muted small">match ${esc(x.score)}${x.margin && x.margin < 99 ? ` · ${esc(x.margin)}× next` : ""}</span>
+      <button class="btn small" data-use="${esc(x.url)}">Use as reference</button></li>`;
+  box.innerHTML = `<div class="suggest">
+      <div class="small">${sure ? "This looks like:" : "Possible matches in the notation corpus:"}</div>
+      <ul>${(sure ? c.slice(0, 1) : c).map(item).join("")}</ul></div>`;
+  box.querySelectorAll("[data-use]").forEach((b) => b.addEventListener("click", () => {
+    $("#refUrl").value = b.dataset.use;
+    submitReference({ url: b.dataset.use });
+  }));
 }
 
 function selectHTML(key, value) {
@@ -496,7 +518,7 @@ async function submitReference(body) {
     S.lastComparison = r.comparison;
     drawSavedRef(r.saved);
     drawComparison(r.comparison);
-    if (r.saved) { refreshLibrary(); toast("Reference saved with this song"); }
+    if (r.saved) { refreshLibrary(); toast("Reference saved with this song"); const sg = $("#refSuggest"); if (sg) sg.innerHTML = ""; }
   } catch (err) { out.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`; }
 }
 

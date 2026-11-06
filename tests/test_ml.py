@@ -99,3 +99,20 @@ def test_corpus_page_parsing():
     prec = parse_piano_page("https://x/a-piano-notes.html", piano)
     assert prec["tonic"] == "C" and prec["lines"][0]["notes"][0][0] == 0
     assert estimate_key([57, 59, 60, 62, 64, 65, 67, 69, 69, 57, 64, 57]) == (9, "minor")
+
+
+def test_lookup_finds_song_regardless_of_sa(tmp_path):
+    from sargam.lookup import suggest
+
+    def rec(slug, rels):
+        return {"url": f"https://x/{slug}.html", "slug": slug, "kind": "sargam", "title": slug, "tonic": "C",
+                "tonic_source": "header", "mode": None, "lines": [{"lyric": None, "raw": "", "notes": [[r, 1, 0] for r in rels]}]}
+
+    target = [0, 2, 4, 5, 4, 2, 0, 7, 9, 7, 5, 4, 2, 4, 0, -1, 0, 2, 7, 4]
+    others = [[0, 4, 7, 12, 7, 4, 0, 4, 7, 12], [12, 11, 9, 7, 5, 4, 2, 0, 2, 4], [0, 0, 7, 7, 9, 9, 7, 5, 5, 4, 4, 2, 2, 0]]
+    p = tmp_path / "songs.jsonl"
+    p.write_text("".join(json.dumps(rec(f"s{i}", r)) + "\n" for i, r in enumerate([*others, target])))
+    noisy = [x + 2 for x in target[:8] + [3] + target[8:]]  # transposed, one wrong note, repeats
+    noisy = [n for x in noisy for n in (x, x)]
+    top = suggest(noisy, k=2, corpus_path=p)
+    assert top[0]["title"] == "s3" and top[0]["margin"] > 1.0

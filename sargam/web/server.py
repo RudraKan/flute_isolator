@@ -394,6 +394,15 @@ def create_app(library_root: Path | None = None, runner=None, after=None) -> Fas
             raise HTTPException(400, str(e))
         return {"saved": meta.get("truth"), "comparison": cmp}
 
+    @app.get("/api/jobs/{item_id}/suggest")
+    def suggest_reference(item_id: str):
+        """Corpus songs whose melody matches this transcription (needs `sargam data build`)."""
+        from ..lookup import suggest
+
+        _, res = result_or_409(item_id)
+        sa = res.tonic.sa_midi
+        return {"candidates": suggest([n.midi - sa for n in res.notes])}
+
     @app.post("/api/jobs/{item_id}/reference")
     def post_reference(item_id: str, body: dict = Body(...)):
         from .reference import ReferenceError, compare, fetch_page_text

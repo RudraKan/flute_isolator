@@ -9,7 +9,7 @@ from sargam.swara import DEGREE_SYMBOLS, collapse_tokens, parse_notation, note_t
 from sargam.synth import synthesize
 from sargam.tonic import PENTATONIC_TEMPLATES, SCALE_TEMPLATES
 
-cfg = Config()
+cfg = Config(pitch_backend="pyin")  # synthetic expectations are pyin-based; keeps unit tests offline
 SCALES = {**SCALE_TEMPLATES, **PENTATONIC_TEMPLATES}
 
 

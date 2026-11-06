@@ -34,13 +34,20 @@ def extract_f0_pyin(y: np.ndarray, sr: int, cfg: Config) -> F0Track:
     return F0Track(times=times, f0_hz=f0.astype(np.float64), conf=conf, hop_s=hop / sr, rms=_rms(y, sr, hop, n))
 
 
+BACKENDS = ("pyin", "crepe", "rmvpe", "fcpe")
+
+
 def extract_f0(y: np.ndarray, sr: int, cfg: Config, backend: str | None = None) -> F0Track:
     backend = backend or cfg.pitch_backend
     if backend == "pyin":
         return extract_f0_pyin(y, sr, cfg)
     if backend == "crepe":
         return extract_f0_crepe(y, sr, cfg)
-    raise ValueError(f"unknown pitch backend {backend!r}")
+    if backend == "rmvpe":
+        return extract_f0_rmvpe(y, sr, cfg)
+    if backend == "fcpe":
+        return extract_f0_fcpe(y, sr, cfg)
+    raise ValueError(f"unknown pitch backend {backend!r} (choose from {', '.join(BACKENDS)})")
 
 
 def _torch_device() -> str:
@@ -75,6 +82,55 @@ def extract_f0_crepe(y: np.ndarray, sr: int, cfg: Config) -> F0Track:
     n = len(f0)
     times = np.arange(n) * hop / 16000
     return F0Track(times=times, f0_hz=f0, conf=conf, hop_s=hop / 16000, rms=_rms(y16, 16000, hop, n))
+
+
+def track_from_salience(sal: np.ndarray, y16: np.ndarray, cfg: Config) -> F0Track:
+    """F0Track from a (frames, 360) RMVPE salience at 10 ms hop. conf = peak salience; frames whose peak is below
+    the decoder floor are NaN, the pipeline's voicing threshold does the rest."""
+    from . import rmvpe
+
+    f0, peak = rmvpe.decode(sal)
+    f0 = np.where((f0 >= cfg.fmin * 0.9) & (f0 <= cfg.fmax * 1.1), f0, np.nan)
+    n = len(f0)
+    times = np.arange(n) * rmvpe.HOP / rmvpe.SR
+    return F0Track(times=times, f0_hz=f0, conf=peak.astype(np.float64), hop_s=rmvpe.HOP / rmvpe.SR,
+                   rms=_rms(y16, rmvpe.SR, rmvpe.HOP, n))
+
+
+def extract_f0_rmvpe(y: np.ndarray, sr: int, cfg: Config) -> F0Track:
+    """RMVPE (trained for vocals in polyphonic music). Weights download once to data/models/. Fixed 10 ms hop."""
+    import librosa
+
+    from . import rmvpe
+
+    y16 = librosa.resample(y.astype(np.float32), orig_sr=sr, target_sr=rmvpe.SR) if sr != rmvpe.SR else y.astype(np.float32)
+    return track_from_salience(rmvpe.salience(y16, rmvpe.SR), y16, cfg)
+
+
+_FCPE = {}
+
+
+def extract_f0_fcpe(y: np.ndarray, sr: int, cfg: Config) -> F0Track:
+    """torchfcpe (bundled weights). conf = peak of the 360-bin latent, decoded with its local-argmax decoder."""
+    import librosa
+    import torch
+    from torchfcpe import spawn_bundled_infer_model
+
+    device = _torch_device()
+    if device not in _FCPE:
+        _FCPE[device] = spawn_bundled_infer_model(device=device)
+    m = _FCPE[device]
+    y16 = np.clip(librosa.resample(y.astype(np.float32), orig_sr=sr, target_sr=16000), -1.0, 1.0)  # FCPE complains outside [-1, 1]
+    hop = m.get_hop_size()
+    with torch.no_grad():
+        wav = torch.from_numpy(y16)[None, :, None].to(device)
+        latent = m.model.forward(m.wav2mel(wav, 16000))
+        cents = m.model.latent2cents_local_decoder(latent, mask=False)
+        f0 = m.model.cent_to_f0(cents)[0, :, 0].cpu().numpy().astype(np.float64)
+        conf = latent.max(dim=-1)[0][0].cpu().numpy().astype(np.float64)
+    f0 = np.where((conf > 0.006) & (f0 >= cfg.fmin * 0.9) & (f0 <= cfg.fmax * 1.1), f0, np.nan)
+    n = len(f0)
+    return F0Track(times=np.arange(n) * hop / 16000, f0_hz=f0, conf=conf, hop_s=hop / 16000, rms=_rms(y16, 16000, hop, n))
 
 
 def save_track(path, track: F0Track) -> None:

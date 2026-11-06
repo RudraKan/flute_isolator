@@ -4,8 +4,8 @@ Running list of ideas deferred from v1. Append here whenever something comes up 
 implementation rather than building it immediately.
 
 ## Transcription quality
-- Pitch tracker upgrade: torchcrepe / RMVPE / SwiftF0 behind the existing `backend=` switch in `sargam/pitch.py`;
-  narrow fmin/fmax per song from a first pass to cut octave errors.
+- ~~Pitch tracker upgrade~~ done 2026-11-06: RMVPE is the default (SER 0.40 -> 0.32), FCPE/CREPE available. Still open:
+  SwiftF0; narrow fmin/fmax per song from a first pass to cut octave errors.
 - Energy/onset-based repeated-note detection from spectral flux instead of RMS dips.
 - Shruti-aware komal/tivra decisions and an intonation report from the 120-bin histogram
   (e.g. "komal Ga sits 20 cents sharp").
@@ -25,9 +25,8 @@ implementation rather than building it immediately.
 
 ## Inputs, interface, data
 - YouTube URL input via yt-dlp.
-- Web UI (FastAPI/Streamlit) wrapping the CLI, rendering pages like notationsworld.
-- Fine-tuning on a sargam notation dataset (dataset TBD). NoteEvents + timings are exported in JSON so they
-  can be paired with any dataset later.
+- ~~Web UI~~ done 2026-11-06 (`sargam serve`).
+- ~~Fine-tuning on a sargam notation dataset~~ v1 done 2026-11-06: notationsworld corpus + NoteNet (see below).
 
 ## Noticed during v1 implementation (2026-09-13)
 - Ornament fidelity: 50 ms murki/kann notes are only partially recovered through pyin (main melody is exact);
@@ -52,3 +51,30 @@ implementation rather than building it immediately.
   separated vocal, tonic-normalised). Start with RMVPE / SwiftF0 as the frame model.
 - Snap ornament/grace pitches to the scale too (only host notes are snapped today), or expand ornaments before snapping.
 - Phrase splitting by lyric line (Whisper) would make side-by-side comparison with references far easier than gap-based phrases.
+
+## After the web UI + learned note model session (2026-11-06)
+- **More labelled songs is the top priority.** Every accuracy number rests on Jeena Jeena alone, and the rules and the
+  NoteNet decode setting were both tuned on it. Add 5-10 songs with references through the UI ("Compare with a
+  reference"), keep 2-3 as a fixed test set (`--real-holdout`), and only then compare model variants.
+- Audio for the scraped notations: pairing corpus pages with the songs' audio (e.g. YouTube) would be the biggest
+  data lever, but bulk-downloading copyrighted audio is a licensing/ToS decision for the user. Not built.
+  Cleaner options: public-domain recordings of songs that have pages (Jana Gana Mana, Vande Mataram, Happy Birthday,
+  Jingle Bells, Western classical piano pages) from Wikimedia Commons / Musopen; open singing datasets with note labels
+  (GTSinger, Vocadito) to make the synthetic contours more realistic.
+- RMVPE + NoteNet end to end: feed RMVPE's 360-bin salience rolled to Sa (`sargam.rmvpe.salience`) as NoteNet's
+  `salience=` input instead of the rendered contour, then unfreeze RMVPE on real pairs (PACE job).
+- Audio-level synthetic data: WORLD (pyworld) resynthesis of real vocal stems with synthetic contours -> realistic
+  timbre with exact labels, for the end-to-end model.
+- Writer-style simplification: NoteNet still writes some sung-but-unwritten embellishments (passing notes in runs).
+  The generator now simulates them; real-pair fine-tuning (`--real-train`) is the proper fix; `--simplify` is the
+  stopgap.
+- Rhythm: add a duration head (the corpus has dot counts) so the rendered dots come from the model instead of beat
+  tracking / median note length.
+- Tonic detection still uses the rule-based notes; a second pass with NoteNet notes could firm it up.
+- Corpus checks: songs with both a sargam and a piano page give a free check of the piano key estimate (Krumhansl);
+  minor-key piano songs currently take Sa = minor tonic.
+- Lyrics: corpus lines carry the lyric line above each notation line, so we can align lyrics with Whisper and show them
+  in the UI like notationsworld does.
+- UI: YouTube/URL input (same licensing question), upload progress bar, NoteNet progress stage, show NoteNet confidence.
+- The RMVPE network was rebuilt from memory (fetching the RVC source was blocked); weights load with strict matching
+  and decode test tones exactly, but a side-by-side check against the reference implementation is still worth doing.

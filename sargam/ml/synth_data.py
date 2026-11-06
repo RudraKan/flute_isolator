@@ -76,6 +76,10 @@ class Performer:
         self.vib_rate = (4.5, _u(r, (5.5, 7.5)))
         self.kann_p = _u(r, (0.0, 0.12))
         self.murki_p = _u(r, (0.0, 0.06))
+        # sung but not written: notation pages give the melody's skeleton, singers fill in passing notes,
+        # neighbour turns and little runs (measured on the reference song: ~120 ms, a third of real extra notes)
+        self.embellish_p = _u(r, (0.0, 0.35))
+        self.embellish_s = (0.05, _u(r, (0.1, 0.18)))
         self.intonation_sd = _u(r, (3, 20))
         self.drift_sd = _u(r, (0, 15))
         self.jitter_sd = _u(r, (1, 9))
@@ -173,11 +177,16 @@ class Performer:
                     k = int(_u(r, (0.035, 0.06)) / HOP_S)
                     seg[pos : pos + k] = 100.0 * p
                     pos += k
+            dips: list[int] = []
+            if dur > 0.25 and r.random() < self.embellish_p:
+                dips = self._embellish(seg, n, notes[i + 1] if i + 1 < len(notes) else None, scale_pcs)
             pitch[i0:i1] = seg
             cls[i0:i1] = rel_to_class(n["rel"]) if CLS_LO <= n["rel"] <= CLS_HI else SIL
             onset[i0] = 1.0
             lv = r.normal(-8, self.level_sd)
             level[i0:i1] = lv - _u(r, (0, 5)) * seg_t / max(dur, 1e-3) + self.tremolo_db * np.sin(2 * np.pi * _u(r, (1, 4)) * seg_t)
+            for d in dips:  # embellishment notes are often re-articulated (a new syllable)
+                level[i0 + d : i0 + d + 2] -= _u(r, (2, 8))
             # legato transition from the previous note: a smooth ramp centred on the written boundary
             if legato and i0 > 0 and np.isfinite(pitch[i0 - 1]):
                 a = 100.0 * prev["rel"]
@@ -207,6 +216,40 @@ class Performer:
         level += r.normal(0, 1.0, T)
         energy = normalise_energy_db(level, np.isfinite(pitch))
         return Window(pitch.astype(np.float32), energy, cls, onset)
+
+    def _embellish(self, seg, n, nxt, scale_pcs) -> list[int]:
+        """Unwritten notes inside a written note's span (labels stay the written note). Returns re-articulation frames."""
+        r = self.rng
+        L = len(seg)
+        figure: list[int] = []
+        kind = r.random()
+        if nxt is not None and abs(nxt["rel"] - n["rel"]) >= 3 and kind < 0.5:  # run of passing notes towards the next note
+            step = 1 if nxt["rel"] > n["rel"] else -1
+            cur = n["rel"]
+            while len(figure) < int(r.integers(1, 3)):
+                cur = self._neighbour(cur, scale_pcs, step)
+                if (nxt["rel"] - cur) * step <= 0:
+                    break
+                figure.append(cur)
+            place_end = True
+        else:  # neighbour turn: go to a scale neighbour and come back
+            figure = [self._neighbour(n["rel"], scale_pcs, int(r.choice([-1, 1])))]
+            if r.random() < 0.3:
+                figure.append(n["rel"])
+                figure.append(self._neighbour(n["rel"], scale_pcs, -1 if figure[0] > n["rel"] else 1))
+            place_end = r.random() < 0.5
+        lens = [max(3, int(_u(r, self.embellish_s) / HOP_S)) for _ in figure]
+        total = sum(lens)
+        if not figure or total > 0.6 * L:
+            return []
+        pos = L - total if place_end else int(r.integers(int(0.3 * L), max(int(0.3 * L) + 1, L - total)))
+        dips = []
+        for p, k in zip(figure, lens):
+            seg[pos : pos + k] = 100.0 * p + r.normal(0, 8)
+            if r.random() < 0.5:
+                dips.append(pos)
+            pos += k
+        return dips
 
     def _fill_gaps_level(self, level, notes) -> None:
         r = self.rng

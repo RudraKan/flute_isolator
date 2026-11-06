@@ -38,6 +38,45 @@ class SynthStream(IterableDataset):
             yield w.rel_cents, w.energy, w.cls, w.onset
 
 
+class RealPairs:
+    """Real songs with a reference notation. Labels come from forced alignment with the current model and are
+    refreshed as it improves; frames the alignment is unsure about are ignored by the loss."""
+
+    def __init__(self, files: list[Path]):
+        from .evalset import load
+
+        self.songs = [s for s in map(load, files) if s["truth_rels"]]
+        self.labels: list[tuple[np.ndarray, np.ndarray]] = []
+
+    def realign(self, model, device) -> dict:
+        from .align import IGNORE, align
+        from .infer import predict_logits
+
+        model.eval()
+        self.labels = []
+        stats = {}
+        for s in self.songs:
+            cl, _ = predict_logits(model, s["rel_cents"], s["energy"], device)
+            lab, on = align(cl, s["truth_rels"])
+            self.labels.append((lab, on))
+            stats[s["name"]] = round(float((lab == IGNORE).mean()), 3)
+        model.train()
+        return stats
+
+    def sample(self, rng: np.random.Generator, n_frames: int) -> tuple:
+        k = int(rng.integers(len(self.songs)))
+        s, (lab, on) = self.songs[k], self.labels[k]
+        T = len(lab)
+        a = int(rng.integers(0, max(1, T - n_frames)))
+        sl = slice(a, a + n_frames)
+        pad = n_frames - len(lab[sl])
+        rel = np.concatenate([s["rel_cents"][sl], np.full(pad, np.nan, np.float32)])
+        en = np.concatenate([s["energy"][sl], np.zeros(pad, np.float32)])
+        cls = np.concatenate([lab[sl], np.zeros(pad, np.int64)])
+        ons = np.concatenate([on[sl], np.zeros(pad, np.float32)])
+        return rel, en, cls, ons
+
+
 def fixed_set(melodies: list[dict], n: int, n_frames: int, seed: int) -> list[tuple]:
     rng = np.random.default_rng(seed)
     out = []
@@ -156,6 +195,11 @@ def main(argv=None):
     ap.add_argument("--init", default=None, help="checkpoint to fine-tune from (weights only)")
     ap.add_argument("--model", default="{}", help='JSON model hparams, e.g. \'{"layers": 6, "d_model": 320, "heads": 5}\'')
     ap.add_argument("--kinds", default="sargam,piano")
+    ap.add_argument("--real-train", default=None, help="glob of real .npz pairs to mix into training (forced alignment)")
+    ap.add_argument("--real-holdout", default="", help="comma-separated song names kept out of real training (eval only)")
+    ap.add_argument("--real-frac", type=float, default=0.25, help="share of each batch drawn from real pairs")
+    ap.add_argument("--real-start", type=int, default=1000, help="first step that uses real pairs (alignment needs a trained model)")
+    ap.add_argument("--realign-every", type=int, default=2000)
     args = ap.parse_args(argv)
 
     device = args.device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
@@ -168,6 +212,16 @@ def main(argv=None):
     eval_files = sorted(Path(args.eval_dir).glob("*.npz")) if Path(args.eval_dir).exists() else []
     print(f"device {device}; {len(train_mel)} train songs, {len(val_mel)} val songs, {len(eval_files)} real eval files", flush=True)
 
+    real = None
+    if args.real_train:
+        import glob
+
+        hold = [h for h in args.real_holdout.split(",") if h]
+        files = [Path(f) for f in sorted(glob.glob(args.real_train)) if not any(Path(f).name.startswith(h) for h in hold)]
+        real = RealPairs(files) if files else None
+        trained_on = {s["name"] for s in real.songs} if real else set()
+        overlap = [f.stem for f in eval_files if f.stem in trained_on]
+        print(f"real pairs: {len(trained_on)} songs; eval songs also trained on: {overlap or 'none'}", flush=True)
     hp = json.loads(args.model)
     model = build_model(hp).to(device)
     if args.init:
@@ -195,6 +249,7 @@ def main(argv=None):
     loader = DataLoader(SynthStream(train_mel, args.frames, args.seed + step), batch_size=args.batch,
                         num_workers=args.workers, persistent_workers=args.workers > 0, prefetch_factor=4 if args.workers else None)
     amp = device == "cuda"
+    real_rng = np.random.default_rng(args.seed + 99)
     dp = DecodeParams()
     log = open(out / "metrics.jsonl", "a")
     t0 = time.time()
@@ -208,6 +263,13 @@ def main(argv=None):
     for rel, energy, cls, onset in loader:
         if step >= args.steps:
             break
+        if real is not None and step >= args.real_start:
+            if not real.labels or (step - args.real_start) % args.realign_every == 0:
+                print(f"step {step} realigned real pairs (ignored frame share: {real.realign(model, device)})", flush=True)
+            n_real = int(round(args.real_frac * len(rel)))
+            for k in range(n_real):
+                r_, e_, c_, o_ = real.sample(real_rng, args.frames)
+                rel[k], energy[k], cls[k], onset[k] = map(torch.from_numpy, (r_, e_, c_, o_))
         rel, energy, cls, onset = (x.to(device, non_blocking=True) for x in (rel, energy, cls, onset))
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=amp):
             l_cls, l_on, _, _ = losses(model, rel, energy, cls, onset, args.onset_pos_weight)

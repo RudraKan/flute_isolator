@@ -194,3 +194,23 @@ def test_simplify_and_engine_mapping():
     assert cfg.resolved().simplify_min_ms == -1.0
     cfg, _ = pipeline_args(clean_options({"simplify": "150"}))
     assert cfg.simplify_min_ms == 150.0 and cfg.notes_engine == "rules"
+
+
+def test_reference_link_at_upload(client, song, monkeypatch):
+    import sargam.web.reference as reference
+
+    page = "SCALE OF THE SONG IS F# MAJOR\nsome lyric\n" + MELODY.replace("\n", " ") + "\n"
+    monkeypatch.setattr(reference, "fetch_page_text", lambda url, timeout=20.0: page)
+    with open(song, "rb") as f:
+        r = client.post("/api/jobs", files={"file": (song.name, f, "audio/wav")},
+                        data={"options": json.dumps(NO_SEP), "reference_url": "https://example.org/x-sargam.html"})
+    assert r.status_code == 200, r.text
+    meta = wait_done(client, r.json()["id"])
+    assert meta["truth"]["source"] == "https://example.org/x-sargam.html"
+    assert meta["truth"]["f1"] is not None and meta["truth"]["ser"] is not None  # scored after the analysis
+
+    monkeypatch.setattr(reference, "fetch_page_text", lambda url, timeout=20.0: "just some lyrics\nno notes here\n")
+    with open(song, "rb") as f:
+        r = client.post("/api/jobs", files={"file": (song.name, f, "audio/wav")},
+                        data={"options": json.dumps(NO_SEP), "reference_url": "https://example.org/y.html"})
+    assert r.status_code == 400 and "no sargam lines" in r.text

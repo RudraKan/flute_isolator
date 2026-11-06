@@ -197,6 +197,23 @@ def render_view(res, style: str, detail: int) -> dict:
 # ---------------------------------------------------------------- app
 
 
+def save_reference(lib: Library, item_id: str, text: str, url: str, cmp: dict | None) -> dict:
+    """Keep a reference with the song (truth.txt in the site dialect + the raw text). Scores are filled in by
+    write_item_outputs after each analysis when the reference was given at upload (cmp None)."""
+    from ..swara import parse_notation
+    from .reference import notation_lines, truth_file_text
+
+    sa, phrases = parse_notation(text, "nw")
+    d = lib.dir(item_id)
+    (d / "truth.txt").write_text(truth_file_text(sa, text))
+    (d / "reference_raw.txt").write_text(text)
+    saved = {"source": url or "pasted", "sa": sa, "saved": time.time(), "n_lines": len(notation_lines(text)),
+             "n_notes": sum(1 for p in phrases for t in p if t.kind == "note"),
+             "f1": cmp["f1"] if cmp else None, "ser": cmp["ser"] if cmp else None}
+    lib.update(item_id, truth=saved)
+    return saved
+
+
 def create_app(library_root: Path | None = None, runner=None, after=None) -> FastAPI:
     from ..audio import DATA_DIR
 
@@ -256,7 +273,7 @@ def create_app(library_root: Path | None = None, runner=None, after=None) -> Fas
         return {"items": items, "busy": worker.current is not None or not worker.q.empty()}
 
     @app.post("/api/jobs")
-    def create_job(file: UploadFile = File(...), options: str = Form("{}")):
+    def create_job(file: UploadFile = File(...), options: str = Form("{}"), reference_url: str = Form("")):
         name = file.filename or "song"
         if Path(name).suffix.lower() not in AUDIO_EXTS:
             raise HTTPException(400, f"Unsupported file type {Path(name).suffix or '(none)'}; use mp3, wav, m4a, flac or mp4")
@@ -265,7 +282,19 @@ def create_app(library_root: Path | None = None, runner=None, after=None) -> Fas
         except json.JSONDecodeError:
             raise HTTPException(400, "options must be JSON")
         opts = clean_options(raw)
+        ref_text = None
+        if reference_url.strip():  # fetch now so a bad link fails before the long analysis starts
+            from .reference import ReferenceError, fetch_page_text, notation_lines
+
+            try:
+                ref_text = fetch_page_text(reference_url.strip())
+            except ReferenceError as e:
+                raise HTTPException(400, f"Reference link: {e}")
+            if not notation_lines(ref_text):
+                raise HTTPException(400, "Reference link: no sargam lines found on that page")
         meta = lib.create(name, file.file, opts)
+        if ref_text is not None:
+            save_reference(lib, meta["id"], ref_text, reference_url.strip(), None)
         worker.submit(meta["id"])
         return public(lib.load(meta["id"]))
 
@@ -367,8 +396,7 @@ def create_app(library_root: Path | None = None, runner=None, after=None) -> Fas
 
     @app.post("/api/jobs/{item_id}/reference")
     def post_reference(item_id: str, body: dict = Body(...)):
-        from ..swara import parse_notation
-        from .reference import ReferenceError, compare, fetch_page_text, notation_lines, truth_file_text
+        from .reference import ReferenceError, compare, fetch_page_text
 
         item_or_404(item_id)
         _, res = result_or_409(item_id)
@@ -382,15 +410,7 @@ def create_app(library_root: Path | None = None, runner=None, after=None) -> Fas
             cmp = compare(res, text)
         except ReferenceError as e:
             raise HTTPException(400, str(e))
-        saved = None
-        if body.get("save", True):
-            sa, phrases = parse_notation(text, "nw")
-            d = lib.dir(item_id)
-            (d / "truth.txt").write_text(truth_file_text(sa, text))
-            (d / "reference_raw.txt").write_text(text)
-            saved = {"source": url or "pasted", "sa": sa, "saved": time.time(), "n_lines": len(notation_lines(text)),
-                     "n_notes": sum(1 for p in phrases for t in p if t.kind == "note"), "f1": cmp["f1"], "ser": cmp["ser"]}
-            lib.update(item_id, truth=saved)
+        saved = save_reference(lib, item_id, text, url, cmp) if body.get("save", True) else None
         return {"saved": saved, "comparison": cmp}
 
     @app.delete("/api/jobs/{item_id}/reference")

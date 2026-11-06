@@ -266,3 +266,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
   .balance input { width: 64px; }
   body.has-player { padding-bottom: 120px; }
 }
+
+.ref-at-upload { display: flex; flex-direction: column; gap: 6px; margin: 18px 0 4px; max-width: 760px; }
+.ref-at-upload input { width: 100%; box-sizing: border-box; }

@@ -185,6 +185,11 @@ function showUpload() {
         <summary>Options</summary>
         <div class="form-grid" id="optForm">${S.schema.map((f) => fieldHTML(f, opts[f.key], "up")).join("")}</div>
       </details>
+      <label class="ref-at-upload">
+        <span>Notationsworld page for this song <span class="muted">(optional)</span></span>
+        <input type="url" id="refUrl" placeholder="https://www.notationsworld.com/…-sargam-and-flute-notes.html" value="${esc(S.pendingRef || "")}">
+        <span class="muted small">The result is scored against it, and the song is kept as a training pair for the model.</span>
+      </label>
       <div class="go-row">
         <button class="btn primary big" id="go" disabled>Transcribe</button>
         <span class="muted small" id="goHint">Separation takes about a minute for a 4-minute song; repeat runs are instant.</span>
@@ -219,6 +224,8 @@ async function submitUpload() {
   const fd = new FormData();
   fd.append("file", f, f.name);
   fd.append("options", JSON.stringify(opts));
+  S.pendingRef = ($("#refUrl").value || "").trim();
+  if (S.pendingRef) fd.append("reference_url", S.pendingRef);
   const go = $("#go");
   go.disabled = true; go.textContent = "Uploading…";
   try {

@@ -13,6 +13,8 @@ class Config:
     fmax: float = 1000.0
     voicing_thr: float = 0.5  # pyin voiced probability; other backends: BACKEND_DEFAULTS
     pitch_backend: str = "rmvpe"
+    notes_engine: str = "rules"  # rules: Viterbi + post-processing; notenet: learned model (sargam/ml)
+    notenet_checkpoint: str = ""  # empty = $SARGAM_NOTENET or data/models/notenet.pt
 
     # tuning
     tuning_smooth_bins: float = 5.0

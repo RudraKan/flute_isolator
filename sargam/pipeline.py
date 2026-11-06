@@ -65,11 +65,18 @@ def analyze(
     tonic.sa_midi = sa_midi
     tonic.sa_hz = refine_sa_hz(track, tuning.offset_cents, sa_midi, cfg)
     scale = estimate_scale(profiles, tonic.pc, cfg)
-    if cfg.snap_rare:
+    if cfg.notes_engine == "notenet":
+        # the rule-based notes above only served tonic detection; the learned model writes the notation
+        from .ml.infer import transcribe_track
+
+        notes = transcribe_track(track, tonic.sa_hz, sa_midi, cfg.voicing_thr, cfg.notenet_checkpoint or None)
+        phrases = split_phrases(notes, cfg.phrase_gap_s)
+        log.append(f"notes from NoteNet ({len(notes)})")
+    elif cfg.snap_rare:
         k = snap_rare_degrees(notes, scale, tonic.pc, cfg)
         if k:
             log.append(f"snapped {k} short off-scale notes onto the detected scale")
-    if cfg.simplify_min_ms > 0:
+    if cfg.simplify_min_ms > 0 and cfg.notes_engine != "notenet":
         before = len(notes)
         notes = simplify_notes(notes, cfg.simplify_min_ms, cfg.simplify_gap_ms)
         phrases = split_phrases(notes, cfg.phrase_gap_s)

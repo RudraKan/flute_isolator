@@ -36,6 +36,7 @@ def transcribe(
     diag: bool = typer.Option(False, "--diag", help="Print tonic candidate table and degree histogram"),
     no_snap: bool = typer.Option(False, "--no-snap", help="Keep short off-scale notes instead of snapping them to the scale"),
     simplify: float | None = typer.Option(None, "--simplify", help="Merge fragments shorter than this many ms into neighbours (fewer, longer notes); default per pitch backend (rmvpe 100, pyin 0)"),
+    notes: str = typer.Option("rules", "--notes", help="Note engine: rules (Viterbi + post-processing) or notenet (trained model in data/models/notenet.pt)"),
 ):
     """Transcribe a song into sargam notation (text), timed notes (JSON) and a MIDI melody."""
     from .flute import parse_flutes
@@ -44,7 +45,7 @@ def transcribe(
 
     if simplify == 0:
         simplify = -1.0  # explicit 0 = off, also for backends that merge by default (Config.resolved)
-    cfg = _cfg(pitch_backend=backend, snap_rare=not no_snap, simplify_min_ms=simplify)
+    cfg = _cfg(pitch_backend=backend, snap_rare=not no_snap, simplify_min_ms=simplify, notes_engine=notes)
     owned = parse_flutes(flutes)
     with console.status("working...") as status:
         res = run(audio, cfg, sa, owned, not no_beats, fold_octaves, model, no_separate, progress=lambda m: status.update(m))
@@ -145,3 +146,113 @@ def truth(
     (d / "meta.json").write_text(json.dumps(meta, indent=1))
     n_notes = sum(1 for p in phrases for t in p if t.kind == "note")
     console.print(f"[green]saved[/green] {d / 'truth.txt'}: Sa={sa}, {len(keep)} lines, {n_notes} notes. Add audio as {d / 'audio.mp3'}")
+
+
+# ---------------------------------------------------------------- dataset and model
+
+data_app = typer.Typer(help="Notation corpus (notationsworld) for training.", no_args_is_help=True)
+model_app = typer.Typer(help="NoteNet: train, evaluate, package for PACE, install.", no_args_is_help=True)
+app.add_typer(data_app, name="data")
+app.add_typer(model_app, name="model")
+
+
+@data_app.command("crawl")
+def data_crawl(
+    kinds: str = typer.Option("sargam,piano", "--kinds", help="Page kinds to fetch"),
+    delay: float = typer.Option(1.2, "--delay", help="Seconds between requests"),
+    limit: int | None = typer.Option(None, "--limit"),
+):
+    """Fetch notation pages not yet cached under data/corpus/raw (resumable, one request at a time)."""
+    from .corpus import crawl, list_urls
+
+    list_urls()
+    n = crawl(tuple(kinds.split(",")), delay, limit, progress=console.print)
+    console.print(f"[green]fetched[/green] {n} new pages")
+
+
+@data_app.command("build")
+def data_build():
+    """Parse cached pages into data/corpus/songs.jsonl."""
+    from .corpus import build, corpus_dir
+
+    counts = build()
+    console.print(counts)
+    console.print(f"[green]wrote[/green] {corpus_dir() / 'songs.jsonl'}")
+
+
+@data_app.command("show")
+def data_show(slug: str = typer.Argument(..., help="Song slug (or part of it)")):
+    """Print a parsed corpus song (check the parser against the page)."""
+    from .corpus import line_text, load_songs
+
+    for rec in load_songs():
+        if slug in rec["slug"]:
+            console.print(f"[bold]{rec['title']}[/bold]  Sa={rec['tonic']} ({rec['tonic_source']}) {rec['url']}")
+            for ln in rec["lines"]:
+                console.print(f"  [dim]{(ln['lyric'] or '')[:40]:40}[/dim] {line_text(ln['notes'])}")
+            return
+    console.print("[red]not found[/red]")
+
+
+@model_app.command("export-eval")
+def model_export_eval(pitch: str = typer.Option("rmvpe,pyin", "--pitch", help="Pitch backends to export features for")):
+    """Pack labelled songs (data/songs/*, web-UI library items with a reference) into data/eval/*.npz."""
+    from .ml.evalset import export
+
+    export(tuple(pitch.split(",")), progress=console.print)
+
+
+@model_app.command("train", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def model_train(ctx: typer.Context):
+    """Train NoteNet (all options are passed to python -m sargam.ml.train; see --help there)."""
+    from .ml.train import main
+
+    main(ctx.args)
+
+
+@model_app.command("eval")
+def model_eval(
+    checkpoint: Path = typer.Argument(..., exists=True),
+    eval_dir: Path = typer.Option(None, "--eval-dir"),
+):
+    """Score a checkpoint on the real-song eval set next to the rule-based baseline."""
+    import torch
+
+    from .metrics import aligned_f1, levenshtein
+    from .ml.decode import DecodeParams
+    from .ml.evalset import eval_dir as default_eval_dir
+    from .ml.evalset import load
+    from .ml.model import load_checkpoint
+    from .ml.train import evaluate_real
+
+    files = sorted((eval_dir or default_eval_dir()).glob("*.npz"))
+    dev = "mps" if torch.backends.mps.is_available() else "cpu"
+    res = evaluate_real(load_checkpoint(checkpoint, dev), files, dev, DecodeParams())
+    for f in files:
+        e = load(f)
+        ser = levenshtein(e["baseline"], e["truth"]) / max(1, len(e["truth"]))
+        _, _, f1 = aligned_f1(e["baseline"], e["truth"])
+        r = res[e["name"]]
+        console.print(f"{e['name']:28} NoteNet SER {r['ser']:.3f} F1 {r['f1']:.3f}   rules SER {ser:.3f} F1 {f1:.3f}")
+
+
+@model_app.command("install")
+def model_install(checkpoint: Path = typer.Argument(..., exists=True, help="best.pt from a training run")):
+    """Copy a trained checkpoint to data/models/notenet.pt (used by --notes notenet and the web UI)."""
+    import shutil
+
+    from .ml.infer import default_checkpoint
+
+    dst = default_checkpoint()
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(checkpoint, dst)
+    console.print(f"[green]installed[/green] {dst}")
+
+
+@model_app.command("bundle")
+def model_bundle(out: Path = typer.Option(Path("dist"), "--out")):
+    """Zip code + corpus + eval set + PACE scripts for training on the cluster (see pace/README.md)."""
+    from .ml.bundle import make_bundle
+
+    path = make_bundle(out)
+    console.print(f"[green]wrote[/green] {path} ({path.stat().st_size / 1e6:.1f} MB). Upload it to PACE and follow pace/README.md")

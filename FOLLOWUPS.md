@@ -65,6 +65,9 @@ implementation rather than building it immediately.
   `salience=` input instead of the rendered contour, then unfreeze RMVPE on real pairs (PACE job).
 - Audio-level synthetic data: WORLD (pyworld) resynthesis of real vocal stems with synthetic contours -> realistic
   timbre with exact labels, for the end-to-end model.
+- Real-pair fine-tuning test (2026-11-06): training on the aligned first half of Jeena Jeena moved SER on the second
+  half 0.373 -> 0.354, where the same amount of extra synthetic training did nothing. That is from about 200 notes, and
+  the repeated chorus makes it optimistic. The path works; measurable gains need many labelled songs.
 - Writer-style simplification: NoteNet still writes some sung-but-unwritten embellishments (passing notes in runs).
   The generator now simulates them; real-pair fine-tuning (`--real-train`) is the proper fix; `--simplify` is the
   stopgap.

@@ -155,9 +155,10 @@ def evaluate_synth(model, items, device, bs, dp: DecodeParams) -> dict:
 
 
 @torch.no_grad()
-def evaluate_real(model, eval_files: list[Path], device, dp: DecodeParams) -> dict:
+def evaluate_real(model, eval_files: list[Path], device, dp: DecodeParams | None = None) -> dict:
+    """Scores per real song. dp=None decodes each song as the app would for its pitch tracker."""
     from ..metrics import aligned_f1
-    from .evalset import load
+    from .evalset import app_decode_params, load
     from .infer import predict_logits
 
     model.eval()
@@ -167,7 +168,7 @@ def evaluate_real(model, eval_files: list[Path], device, dp: DecodeParams) -> di
             continue
         e = load(f)
         cl, ol = predict_logits(model, e["rel_cents"], e["energy"], device)
-        hyp = symbols(decode(cl, ol, dp))
+        hyp = symbols(decode(cl, ol, dp or app_decode_params(e["backend"])))
         ser = _levenshtein(hyp, e["truth"]) / max(1, len(e["truth"]))
         p, r, f1 = aligned_f1(hyp, e["truth"])
         out[e["name"]] = {"ser": round(ser, 4), "p": round(p, 3), "r": round(r, 3), "f1": round(f1, 3), "n_pred": len(hyp)}
@@ -289,7 +290,7 @@ def main(argv=None):
             print(f"step {step} loss_cls {run_cls:.4f} loss_on {run_on:.4f} lr {sched.get_last_lr()[0]:.2e} {rate:.2f} it/s", flush=True)
         if step % args.eval_every == 0 or step == args.steps:
             vm = evaluate_synth(model, val_items, device, args.batch, dp)
-            rm = evaluate_real(model, eval_files, device, dp) if eval_files else {}
+            rm = evaluate_real(model, eval_files, device) if eval_files else {}
             score = vm["loss_cls"] + args.onset_weight * vm["loss_on"]
             rec = {"step": step, "time_s": round(time.time() - t0), "val": vm, "real": rm}
             log.write(json.dumps(rec) + "\n")

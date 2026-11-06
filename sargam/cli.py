@@ -227,10 +227,9 @@ def model_train(ctx: typer.Context):
 def model_eval(
     checkpoint: Path = typer.Argument(..., exists=True),
     eval_dir: Path = typer.Option(None, "--eval-dir"),
+    min_note_ms: float = typer.Option(0, "--min-note-ms", help="Decoder minimum note length (0 = the app's default for each pitch tracker)"),
 ):
     """Score a checkpoint on the real-song eval set next to the rule-based baseline."""
-    import torch
-
     from .metrics import aligned_f1, levenshtein
     from .ml.decode import DecodeParams
     from .ml.evalset import eval_dir as default_eval_dir
@@ -238,9 +237,11 @@ def model_eval(
     from .ml.model import load_checkpoint
     from .ml.train import evaluate_real
 
+    from .ml.infer import _device
+
     files = sorted((eval_dir or default_eval_dir()).glob("*.npz"))
-    dev = "mps" if torch.backends.mps.is_available() else "cpu"
-    res = evaluate_real(load_checkpoint(checkpoint, dev), files, dev, DecodeParams())
+    dev = _device()
+    res = evaluate_real(load_checkpoint(checkpoint, dev), files, dev, DecodeParams(min_note_frames=round(min_note_ms / 10)) if min_note_ms else None)
     for f in files:
         e = load(f)
         ser = levenshtein(e["baseline"], e["truth"]) / max(1, len(e["truth"]))

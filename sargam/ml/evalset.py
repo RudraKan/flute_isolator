@@ -99,4 +99,14 @@ def load(path: Path) -> dict:
         "name": path.stem, "rel_cents": z["rel_cents"], "energy": z["energy"], "sa_midi": int(z["sa_midi"]),
         "truth": str(z["truth"]).split(), "baseline": str(z["baseline"]).split(),
         "truth_rels": [int(x) for x in z["truth_rels"]] if "truth_rels" in z else None,
+        "backend": str(z["backend"]) if "backend" in z else path.stem.rsplit(".", 1)[-1],
     }
+
+
+def app_decode_params(backend: str):
+    """The decoder settings the app uses for this pitch tracker (simplify default = minimum note length)."""
+    from ..config import BACKEND_DEFAULTS
+    from .decode import DecodeParams
+
+    min_ms = BACKEND_DEFAULTS.get(backend, {}).get("simplify_min_ms", 0.0) or 40.0
+    return DecodeParams(min_note_frames=max(1, int(round(min_ms / 10.0))))

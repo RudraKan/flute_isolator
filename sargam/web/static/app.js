@@ -347,12 +347,12 @@ async function showResult(meta, token) {
         <div class="scale-main"><div class="scale-label">Scale of the flute</div><div class="scale-big">${esc(s.sa)}</div>
           <div class="scale-hz">Sa = ${esc(s.sa_hz)} Hz</div></div>
         <div class="facts">
-          <div class="row"><span class="k">Sa</span><span class="chip ${confClass}">${s.overridden ? "set by you" : `${esc(s.tonic_label)} confidence`}</span>
-            <span class="muted small">margin ${esc(s.tonic_margin)}</span></div>
-          <div class="row"><span class="k">Scale</span><span>${esc(s.scale)}${s.mode ? ` · ${esc(s.sa)} ${esc(s.mode)}` : ""}</span></div>
-          ${s.tempo_bpm ? `<div class="row"><span class="k">Tempo</span><span>${esc(s.tempo_bpm)} bpm</span></div>` : ""}
-          <div class="row"><span class="k">Range</span><span>${esc(s.range)}</span>${s.fits ? "" : `<span class="chip warn">beyond the flute range</span>`}</div>
-          <div class="row"><span class="k">Flute</span><span>${esc(s.flute_advice)}</span></div>
+          <div class="row"><span class="k">Sa</span><span class="v"><span class="chip ${confClass}">${s.overridden ? "set by you" : `${esc(s.tonic_label)} confidence`}</span>
+            <span class="muted small">margin ${esc(s.tonic_margin)}</span></span></div>
+          <div class="row"><span class="k">Scale</span><span class="v">${esc(s.scale)}${s.mode ? ` · ${esc(s.sa)} ${esc(s.mode)}` : ""}</span></div>
+          ${s.tempo_bpm ? `<div class="row"><span class="k">Tempo</span><span class="v">${esc(s.tempo_bpm)} bpm</span></div>` : ""}
+          <div class="row"><span class="k">Range</span><span class="v">${esc(s.range)} ${s.fits ? "" : `<span class="chip warn">beyond the flute range</span>`}</span></div>
+          <div class="row"><span class="k">Flute</span><span class="v">${esc(s.flute_advice)}</span></div>
           ${warnings.join("")}
         </div>
       </div>

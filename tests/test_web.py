@@ -105,7 +105,7 @@ def test_upload_render_audio_reference_pairs(client, song, tmp_path):
     truth = tmp_path / "truth.txt"
     truth.write_text(REFERENCE)
     rep = compare_files(item / "transcription.notes.json", truth)
-    assert cmp["f1"] == round(rep.f1, 3) and cmp["ser"] == round(rep.ser, 3) and cmp["tonic"]["ok"] is True
+    assert cmp["f1"] == round(rep.f1, 4) and cmp["ser"] == round(rep.ser, 4) and cmp["tonic"]["ok"] is True
     assert cmp["f1"] > 0.8
     n_truth = sum(1 for l in cmp["lines"] for o in l["ops"] if o["op"] != "ins")
     assert n_truth == cmp["n_truth"] and len(cmp["lines"]) == 3

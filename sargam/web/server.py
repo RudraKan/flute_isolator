@@ -403,13 +403,13 @@ def create_app(library_root: Path | None = None, runner=None, after=None) -> Fas
     return app
 
 
-def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = False) -> None:
+def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = False, library: Path | None = None) -> None:
     import threading
     import webbrowser
 
     import uvicorn
 
-    app = create_app()
+    app = create_app(library)
     url = f"http://{host}:{port}/"
     if open_browser:
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()

@@ -35,6 +35,25 @@ Other commands: `sargam audition song.mp3` (wav with vocal stem left, transcript
 `sargam compare out/song.notes.json truth.txt` (score against a reference notation),
 `sargam stems song.mp3` (separation only).
 
+## Web UI
+
+```
+uv run sargam serve --open        # http://127.0.0.1:8765
+```
+
+Drop a song (mp3/wav/m4a/flac/mp4) and it is analysed in the background (one at a time; progress shows each
+stage). The result page shows the scale of the flute, Sa confidence, scale/raga, tempo and flute advice, then the
+notation phrase by phrase in notationsworld style (or our dots/dashes styles). Play the song, the vocal stem or a
+flute-like voice playing the transcription (or both with a balance slider); the current note is highlighted, click a
+note to jump there, click a phrase number to loop it, slow down to 0.5x for practice. Keys: space play/pause,
+←/→ previous/next phrase, L loop, Esc stop looping.
+
+"Re-analyse" re-runs with a different Sa, pitch tracker or simplify setting (stems and pitch tracks are cached, so it
+takes seconds). "Compare with a reference" takes pasted notationsworld notation or the page URL, shows SER /
+precision / recall / F1 and a per-line diff (click a wrong note to hear that spot), and saves the reference with the
+song. Everything lives in `data/library/<id>/` (input, outputs, pickled result, `truth.txt`); `GET /api/pairs` lists
+songs that have both audio and a reference, for evaluation and training. API docs at `/api/docs`.
+
 ## Notation conventions
 
 - `S R G m P D N` shuddha swaras; `r g d n` komal; `M` tivra Ma, `m` shuddha Ma

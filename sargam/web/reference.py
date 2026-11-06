@@ -105,9 +105,10 @@ def compare(res, text: str) -> dict:
     counts = {k: sum(1 for op, _, _ in ops if op == k) for k in ("match", "octave", "sub", "ins", "del")}
     return {
         "tonic": {"pred": rep.tonic_pred, "truth": rep.tonic_truth, "ok": rep.tonic_ok, "relation": rep.tonic_relation},
-        "ser": round(rep.ser, 3), "ser_no_octave": round(rep.ser_no_octave, 3),
-        "precision": round(rep.precision, 3), "recall": round(rep.recall, 3), "f1": round(rep.f1, 3),
-        "scale_jaccard": round(rep.scale_jaccard, 3), "n_pred": rep.n_pred, "n_truth": rep.n_truth,
+        # 4 decimals so the UI's 2-decimal display rounds like `sargam compare` (no double rounding)
+        "ser": round(rep.ser, 4), "ser_no_octave": round(rep.ser_no_octave, 4),
+        "precision": round(rep.precision, 4), "recall": round(rep.recall, 4), "f1": round(rep.f1, 4),
+        "scale_jaccard": round(rep.scale_jaccard, 4), "n_pred": rep.n_pred, "n_truth": rep.n_truth,
         "counts": counts, "lines": [{"i": k, "ops": ops_k} for k, ops_k in enumerate(lines)],
         "table": rep.table(),
     }

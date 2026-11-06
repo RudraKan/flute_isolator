@@ -10,11 +10,13 @@ accompaniment) → sargam mapping → bansuri range fit → text / JSON / MIDI o
 
 Accuracy on the reference song (Jeena Jeena vs its notationsworld notation, plain notes):
 
-| engine | SER | precision | recall | F1 |
-|---|---|---|---|---|
-| rules + pyin | 0.400 | 0.79 | 0.74 | 0.76 |
-| rules + RMVPE (default) | 0.323 | 0.82 | 0.82 | 0.82 |
-| NoteNet + RMVPE (`--notes notenet`, first local model) | 0.288 | 0.85 | 0.83 | 0.84 |
+| engine | SER | F1 |
+|---|---|---|
+| rules + pyin | 0.400 | 0.765 |
+| rules + RMVPE (default) | 0.323 | 0.822 |
+| NoteNet + pyin (`--pitch pyin --notes notenet`) | 0.342 | 0.795 |
+| NoteNet + RMVPE (`--notes notenet`, local model, 6k steps) | 0.300 | 0.842 |
+| NoteNet + RMVPE, `--simplify 120` | 0.271–0.283 | 0.845–0.850 |
 
 One song is a thin test set: add references through the web UI to grow it (see "Learned note model" below).
 

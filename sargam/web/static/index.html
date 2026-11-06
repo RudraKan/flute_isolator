@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sargam</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='13' width='28' height='6' rx='3' fill='%23b45309'/%3E%3Ccircle cx='12' cy='16' r='1.4' fill='%23fff'/%3E%3Ccircle cx='17' cy='16' r='1.4' fill='%23fff'/%3E%3Ccircle cx='22' cy='16' r='1.4' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="topbar">
+  <button id="libToggle" class="icon-btn narrow-only" aria-label="Show library" aria-expanded="false">&#9776;</button>
+  <a href="#/" class="brand">Sargam <span class="brand-sub">song &rarr; bansuri notation</span></a>
+  <span class="spacer"></span>
+  <span id="busy" class="busy" hidden></span>
+  <a href="#/" class="btn primary" id="newBtn">+ New song</a>
+</header>
+
+<div class="layout">
+  <aside id="library" class="library" aria-label="Library">
+    <div class="lib-head">Library</div>
+    <ul id="libList" class="lib-list"></ul>
+    <p id="libEmpty" class="muted small lib-empty" hidden>Songs you transcribe show up here.</p>
+  </aside>
+  <main id="main" class="main" tabindex="-1"></main>
+</div>
+
+<div id="player" class="player" hidden>
+  <button id="playBtn" class="play" aria-label="Play (space)" title="Play / pause (space)">&#9654;</button>
+  <span class="time"><span id="tCur">0:00</span><span class="muted"> / </span><span id="tDur">0:00</span></span>
+  <input id="seek" class="seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek">
+  <div class="seg" role="group" aria-label="What to hear">
+    <button data-src="song" class="on" title="Original song">Song</button><button data-src="vocals" title="Separated vocal stem">Vocals</button><button data-src="none" title="Only the transcription voice">Off</button>
+  </div>
+  <label class="synth-toggle" title="Play the transcription with a flute-like voice"><input type="checkbox" id="synthOn"> Transcription</label>
+  <label class="balance" title="Balance between the song and the transcription voice"><span class="muted small">song</span><input id="balance" type="range" min="0" max="100" value="50" aria-label="Balance"><span class="muted small">notes</span></label>
+  <label class="speed" title="Playback speed (pitch is kept)"><select id="speed" aria-label="Speed">
+    <option value="0.5">0.5&times;</option><option value="0.6">0.6&times;</option><option value="0.75">0.75&times;</option><option value="0.9">0.9&times;</option><option value="1" selected>1&times;</option>
+  </select></label>
+  <button id="loopChip" class="chip loop" hidden title="Stop looping (Esc)"></button>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="dropHint" class="drop-hint" hidden><div>Drop the song to transcribe it</div></div>
+<audio id="audio" preload="auto"></audio>
+<script src="/static/app.js"></script>
+</body>
+</html>

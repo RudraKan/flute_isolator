@@ -375,6 +375,57 @@ def note_to_token(n: NoteEvent, sa_midi: int, detail: int = 1) -> Token:
     return tok
 
 
+@dataclass
+class Seg:
+    """One piece of a rendered line: a note (with its timing) or a separator. Joining the texts gives the line."""
+
+    text: str
+    note: NoteEvent | None = None
+
+
+def layout_phrase(
+    notes: list[NoteEvent],
+    sa_midi: int,
+    beat_period: float | None = None,
+    median_dur: float = 0.0,
+    detail: int = 1,
+    style: str = "dashes",
+) -> list[Seg]:
+    """Structured form of `render_phrase`: the line as note segments (each carrying its NoteEvent) and separators."""
+    if detail == 0 or style == "nw":
+        from .notes import expand_ornaments
+
+        notes = expand_ornaments(notes)
+    segs: list[Seg] = []
+    if style in ("dots", "nw"):
+        unit = (beat_period / 2 if beat_period else median_dur) or 0.0
+        last_end = None
+        chunk_open = False
+        for n in notes:
+            if last_end is not None and n.start - last_end > 0.12 and chunk_open:
+                segs.append(Seg(" "))
+                chunk_open = False
+            units = max(1, int(round(n.duration / unit))) if unit > 0 else 1
+            if style == "nw":
+                rel = n.midi - sa_midi
+                sym = nw_symbol(rel % 12, rel // 12)
+            else:
+                sym = str(note_to_token(n, sa_midi, detail))
+            segs.append(Seg(sym + "." * min(units, 6), n))
+            chunk_open = True
+            last_end = n.end
+        return segs
+    for n in notes:
+        s = str(note_to_token(n, sa_midi, detail))
+        if detail >= 2 and n.confidence < 0.5:
+            s += "?"
+        dashes = _sustain_dashes(n.duration, beat_period, median_dur)
+        if segs:
+            segs.append(Seg(" "))
+        segs.append(Seg(s + " -" * dashes, n))
+    return segs
+
+
 def render_phrase(
     notes: list[NoteEvent],
     sa_midi: int,
@@ -386,39 +437,12 @@ def render_phrase(
     """style 'dashes': `S R - G` (one '-' per extra unit). style 'dots': `S.R..G.` as on notation sites
     (each note followed by one dot per unit it lasts; notes of one breath group are glued, groups separated by a space).
     style 'nw': like 'dots' but in the notationsworld legend (lowercase = lower octave, X(k) = komal), plain notes."""
-    parts: list[str] = []
-    if detail == 0 or style == "nw":
-        from .notes import expand_ornaments
+    return "".join(seg.text for seg in layout_phrase(notes, sa_midi, beat_period, median_dur, detail, style))
 
-        notes = expand_ornaments(notes)
-    if style in ("dots", "nw"):
-        unit = (beat_period / 2 if beat_period else median_dur) or 0.0
-        chunks: list[str] = []
-        cur = ""
-        last_end = None
-        for n in notes:
-            if last_end is not None and n.start - last_end > 0.12 and cur:
-                chunks.append(cur)
-                cur = ""
-            units = max(1, int(round(n.duration / unit))) if unit > 0 else 1
-            if style == "nw":
-                rel = n.midi - sa_midi
-                sym = nw_symbol(rel % 12, rel // 12)
-            else:
-                sym = str(note_to_token(n, sa_midi, detail))
-            cur += sym + "." * min(units, 6)
-            last_end = n.end
-        if cur:
-            chunks.append(cur)
-        return " ".join(chunks)
-    for n in notes:
-        s = str(note_to_token(n, sa_midi, detail))
-        if detail >= 2 and n.confidence < 0.5:
-            s += "?"
-        dashes = _sustain_dashes(n.duration, beat_period, median_dur)
-        parts.append(s)
-        parts.extend(["-"] * dashes)
-    return " ".join(parts)
+
+def median_note_duration(phrases: list[Phrase]) -> float:
+    durs = sorted(n.duration for p in phrases for n in p.notes)
+    return durs[len(durs) // 2] if durs else 0.0
 
 
 def render_notation(
@@ -430,8 +454,7 @@ def render_notation(
     header_lines: list[str] | None = None,
     style: str = "dashes",
 ) -> str:
-    durs = sorted(n.duration for p in phrases for n in p.notes)
-    median_dur = durs[len(durs) // 2] if durs else 0.0
+    median_dur = median_note_duration(phrases)
     lines: list[str] = list(header_lines or [])
     if lines:
         lines.append("")

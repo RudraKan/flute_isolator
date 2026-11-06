@@ -20,3 +20,15 @@ def test_compare_tokens_report():
     rep2 = compare_tokens(parse_line("S R g"), truth, "C#", "F#")
     assert rep2.tonic_ok is False and "fifth" in rep2.tonic_relation
     assert 0 < rep2.ser <= 1
+
+
+def test_align_ops_covers_both_sequences():
+    from sargam.metrics import align_ops
+
+    pred = ["S", "R", "X", "G", "P'"]
+    truth = ["S", "R", "G", "m", "P"]
+    ops = align_ops(pred, truth)
+    assert [i for _, i, _ in ops if i is not None] == list(range(len(pred)))
+    assert [j for _, _, j in ops if j is not None] == list(range(len(truth)))
+    kinds = [op for op, _, _ in ops]
+    assert kinds[:2] == ["match", "match"] and "ins" in kinds and "octave" in kinds

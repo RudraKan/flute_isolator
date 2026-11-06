@@ -105,6 +105,18 @@ def stems(audio: Path = typer.Argument(..., exists=True), model: str = typer.Opt
     console.print(f"[green]stems[/green] in {cache_dir(audio) / 'stems'} via {s.backend}")
 
 
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8765, "--port"),
+    open_browser: bool = typer.Option(False, "--open", help="Open the UI in the default browser"),
+):
+    """Start the local web UI: upload songs, read and play along with the sargam, compare with a reference."""
+    from .web.server import serve as run_server
+
+    run_server(host, port, open_browser)
+
+
 if __name__ == "__main__":
     app()
 

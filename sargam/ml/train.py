@@ -163,6 +163,8 @@ def evaluate_real(model, eval_files: list[Path], device, dp: DecodeParams) -> di
     model.eval()
     out = {}
     for f in eval_files:
+        if not f.exists():
+            continue
         e = load(f)
         cl, ol = predict_logits(model, e["rel_cents"], e["energy"], device)
         hyp = symbols(decode(cl, ol, dp))

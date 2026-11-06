@@ -97,7 +97,8 @@ def to_note_events(decoded: list[DecodedNote], sa_midi: int, rel_cents: np.ndarr
             seg = seg[np.isfinite(seg)]
             if len(seg):
                 dev = float(np.median(seg) - 100.0 * d.rel)
-        events.append(NoteEvent(start=d.start_f * HOP_S, end=d.end_f * HOP_S, midi=sa_midi + d.rel, cents_dev=dev, confidence=d.conf))
+        events.append(NoteEvent(start=float(d.start_f * HOP_S), end=float(d.end_f * HOP_S), midi=int(sa_midi + d.rel),
+                                cents_dev=float(dev), confidence=float(d.conf)))
     return events
 
 

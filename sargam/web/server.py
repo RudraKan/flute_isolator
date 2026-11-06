@@ -41,7 +41,7 @@ OPTION_SCHEMA: list[dict] = [
      "help": "NoteNet appears here once a trained model is installed (sargam model install best.pt)."},
     {"key": "simplify", "label": "Simplify", "type": "select", "choices": list(SIMPLIFY), "labels": SIMPLIFY, "default": "auto",
      "affects": "analysis", "target": "cfg:simplify_min_ms",
-     "help": "Merge notes shorter than this into their neighbours: longer values give fewer, easier notes. Rules engine only."},
+     "help": "Merge notes shorter than this into their neighbours: longer values give fewer, easier notes."},
     {"key": "flutes", "label": "Flutes you own", "type": "text", "placeholder": "e.g. C, G bass, F#", "default": "",
      "affects": "analysis", "target": "run:flutes", "help": "Used to recommend which flute to play the song on."},
     {"key": "fold", "label": "Fold out-of-range notes into the flute range", "type": "bool", "default": False,

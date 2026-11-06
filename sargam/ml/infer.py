@@ -22,6 +22,8 @@ def default_checkpoint() -> Path:
 def _device() -> str:
     import torch
 
+    if os.environ.get("SARGAM_DEVICE"):
+        return os.environ["SARGAM_DEVICE"]
     if torch.cuda.is_available():
         return "cuda"
     if torch.backends.mps.is_available():
@@ -80,13 +82,16 @@ def transcribe_features(model, rel_cents, energy, sa_midi: int, params: DecodePa
     return to_note_events(decode(cls_logits, onset_logits, params), sa_midi, rel_cents)
 
 
-def transcribe_track(track, sa_hz: float, sa_midi: int, voicing_thr: float, checkpoint: str | Path | None = None):
-    """NoteEvents for a pitch track, Sa given. Used by pipeline.analyze when notes_engine == 'notenet'."""
+def transcribe_track(track, sa_hz: float, sa_midi: int, voicing_thr: float, checkpoint: str | Path | None = None,
+                     min_note_ms: float = 40.0):
+    """NoteEvents for a pitch track, Sa given. Used by pipeline.analyze when notes_engine == 'notenet'.
+    min_note_ms is the simplification knob: shorter decoded notes merge into their neighbour."""
     from .features import track_features
 
     path = Path(checkpoint or default_checkpoint())
     if not path.exists():
-        raise FileNotFoundError(f"no NoteNet checkpoint at {path}; train one (sargam-train) or set SARGAM_NOTENET")
+        raise FileNotFoundError(f"no NoteNet checkpoint at {path}; install one with `sargam model install best.pt` or set SARGAM_NOTENET")
     model = _load(str(path), _device())
     rel, energy = track_features(track, sa_hz, voicing_thr)
-    return transcribe_features(model, rel, energy, sa_midi)
+    params = DecodeParams(min_note_frames=max(1, int(round(min_note_ms / 10.0))))
+    return transcribe_features(model, rel, energy, sa_midi, params)

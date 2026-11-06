@@ -74,7 +74,8 @@ def analyze(
         # the rule-based notes above only served tonic detection; the learned model writes the notation
         from .ml.infer import transcribe_track
 
-        notes = transcribe_track(track, tonic.sa_hz, sa_midi, cfg.voicing_thr, cfg.notenet_checkpoint or None)
+        min_ms = cfg.simplify_min_ms if cfg.simplify_min_ms > 0 else 40.0
+        notes = transcribe_track(track, tonic.sa_hz, sa_midi, cfg.voicing_thr, cfg.notenet_checkpoint or None, min_ms)
         phrases = split_phrases(notes, cfg.phrase_gap_s)
         log.append(f"notes from NoteNet ({len(notes)})")
     elif cfg.snap_rare:
